@@ -16,17 +16,23 @@ void main() {
 class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: () {
-        print("Button Pressed");
-      },
-      style: TextButton.styleFrom(
-        foregroundColor: Colors.pink,
-        backgroundColor: Colors.green,
-      ),
-      child: const Text(
-        "Text Button",
-        style: TextStyle(fontSize: 28),
+    return Container(
+      margin: EdgeInsets.all(20),
+      child: TextButton(
+        onPressed: () {
+          print("Button Pressed");
+        },
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.pink,
+          backgroundColor: Colors.green,
+          padding: EdgeInsets.all(10),
+        ),
+        child: const Text(
+          "Text Button",
+          style: TextStyle(
+            fontSize: 28,
+          ),
+        ),
       ),
     );
   }
