@@ -17,28 +17,29 @@ class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.all(20),
-      child: TextButton.icon(
-        onPressed: () {
-          print("Button Pressed");
-        },
-        style: TextButton.styleFrom(
-          foregroundColor: Colors.pink,
+      margin: EdgeInsets.all(10),
+      child: ElevatedButton.icon(
+        onPressed: null,
+        style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green,
-          padding: EdgeInsets.all(10),
+          foregroundColor: Colors.white,
+          minimumSize: Size(240, 80),
+          padding: EdgeInsets.all(20),
+          disabledBackgroundColor:
+              Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(
-                  18,
+                  10,
                 ),
           ),
-          elevation: 20,
-          shadowColor: Colors.blue
-              .withOpacity(0.5),
         ),
-        icon: Icon(Icons.add, size: 30),
+        icon: Icon(
+          Icons.add_card,
+          size: 30,
+        ),
         label: const Text(
-          "Text Button",
+          'Hihi',
           style: TextStyle(
             fontSize: 28,
           ),
