@@ -18,7 +18,7 @@ class MyWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.all(20),
-      child: TextButton(
+      child: TextButton.icon(
         onPressed: () {
           print("Button Pressed");
         },
@@ -26,8 +26,18 @@ class MyWidget extends StatelessWidget {
           foregroundColor: Colors.pink,
           backgroundColor: Colors.green,
           padding: EdgeInsets.all(10),
+          shape: RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(
+                  18,
+                ),
+          ),
+          elevation: 20,
+          shadowColor: Colors.blue
+              .withOpacity(0.5),
         ),
-        child: const Text(
+        icon: Icon(Icons.add, size: 30),
+        label: const Text(
           "Text Button",
           style: TextStyle(
             fontSize: 28,
