@@ -17,8 +17,8 @@ class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.orange,
-      child: Row(
+      color: Colors.green,
+      child: Column(
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment:
             MainAxisAlignment
@@ -31,33 +31,33 @@ class MyWidget extends StatelessWidget {
             style:
                 ElevatedButton.styleFrom(
                   backgroundColor:
-                      Colors.green,
+                      Colors.pink,
                   foregroundColor:
                       Colors.white,
                 ),
             child: const Text(
-              "Button 1",
+              "Bottom 1",
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 15,
               ),
             ),
           ),
 
           Container(
-            height: 100,
+            width: 200,
             child: ElevatedButton(
               onPressed: () {},
               style:
                   ElevatedButton.styleFrom(
                     backgroundColor:
-                        Colors.green,
+                        Colors.pink,
                     foregroundColor:
                         Colors.white,
                   ),
               child: const Text(
-                "Button 2",
+                "Bottom 2",
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 15,
                 ),
               ),
             ),
@@ -68,14 +68,14 @@ class MyWidget extends StatelessWidget {
             style:
                 ElevatedButton.styleFrom(
                   backgroundColor:
-                      Colors.green,
+                      Colors.pink,
                   foregroundColor:
                       Colors.white,
                 ),
             child: const Text(
-              "Button 3",
+              "Bottom 3",
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 15,
               ),
             ),
           ),
