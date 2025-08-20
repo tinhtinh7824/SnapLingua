@@ -16,22 +16,31 @@ void main() {
 class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: () {
-        print("ok");
-      },
-      style: OutlinedButton.styleFrom(
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.all(50),
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(40),
+    return Container(
+      width: 200,
+      height: 200,
+      padding: const EdgeInsets.all(25),
+      margin: const EdgeInsets.all(20),
+      alignment: Alignment.center,
+
+      decoration: BoxDecoration(
+        color: Colors.blue,
+        shape: BoxShape.rectangle,
+        borderRadius: BorderRadius.all(
+          Radius.circular(20),
+        ),
+        border: Border.all(
+          width: 2,
+          color: Colors.red,
         ),
       ),
-      child: Text(
-        "Haha",
-        style: TextStyle(fontSize: 28),
+      transform: Matrix4.rotationZ(0.2),
+      child: const Text(
+        "data",
+        style: TextStyle(
+          fontSize: 30,
+          color: Colors.white,
+        ),
       ),
     );
   }
