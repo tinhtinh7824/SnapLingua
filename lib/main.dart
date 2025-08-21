@@ -17,30 +17,37 @@ class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.all(10),
-      child: Column(
+      color: Colors.grey,
+      width: 500,
+      height: 500,
+      child: Stack(
+        // alignment: Alignment.topRight,
+        fit: StackFit.loose,
+        clipBehavior: Clip.none,
         children: [
-          Expanded(
-            flex: 1,
-            child: Container(
-              color: Colors.red,
-              height: 150,
-            ),
+          Container(
+            color: Colors.blue,
+            height: 300,
+            width: 300,
           ),
-          const SizedBox(height: 10),
-          Expanded(
-            flex: 2,
-            child: Container(
-              color: Colors.blue,
-              height: 150,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            flex: 1,
+
+          Positioned(
+            left: 10,
+            top: 10,
             child: Container(
               color: Colors.green,
-              height: 150,
+              height: 700,
+              width: 200,
+            ),
+          ),
+
+          Align(
+            alignment:
+                Alignment.bottomRight,
+            child: Container(
+              color: Colors.pink,
+              height: 100,
+              width: 100,
             ),
           ),
         ],
