@@ -17,66 +17,30 @@ class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.green,
+      margin: EdgeInsets.all(10),
       child: Column(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment:
-            MainAxisAlignment
-                .spaceEvenly,
-        crossAxisAlignment:
-            CrossAxisAlignment.center,
         children: [
-          ElevatedButton(
-            onPressed: () {},
-            style:
-                ElevatedButton.styleFrom(
-                  backgroundColor:
-                      Colors.pink,
-                  foregroundColor:
-                      Colors.white,
-                ),
-            child: const Text(
-              "Bottom 1",
-              style: TextStyle(
-                fontSize: 15,
-              ),
+          Expanded(
+            flex: 1,
+            child: Container(
+              color: Colors.red,
+              height: 150,
             ),
           ),
-
-          Container(
-            width: 200,
-            child: ElevatedButton(
-              onPressed: () {},
-              style:
-                  ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Colors.pink,
-                    foregroundColor:
-                        Colors.white,
-                  ),
-              child: const Text(
-                "Bottom 2",
-                style: TextStyle(
-                  fontSize: 15,
-                ),
-              ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 2,
+            child: Container(
+              color: Colors.blue,
+              height: 150,
             ),
           ),
-
-          ElevatedButton(
-            onPressed: () {},
-            style:
-                ElevatedButton.styleFrom(
-                  backgroundColor:
-                      Colors.pink,
-                  foregroundColor:
-                      Colors.white,
-                ),
-            child: const Text(
-              "Bottom 3",
-              style: TextStyle(
-                fontSize: 15,
-              ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 1,
+            child: Container(
+              color: Colors.green,
+              height: 150,
             ),
           ),
         ],
