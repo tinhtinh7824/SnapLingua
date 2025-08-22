@@ -16,52 +16,79 @@ void main() {
 class MyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(color: Colors.green),
+    return Container(
+      color: Colors.blue,
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(10),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(
+            10.0,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 40,
+                color: Colors.red,
+              ),
 
-        Positioned(
-          bottom: 20,
-          left: 10,
-          right: 10,
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(
-                    10.0,
-                  ),
-            ),
-            child: Padding(
-              padding:
-                  const EdgeInsets.all(
-                    10.0,
-                  ),
-              child: Column(
+              const SizedBox(width: 10),
+
+              const Expanded(
+                child: Column(
+                  mainAxisSize:
+                      MainAxisSize.min,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    Text(
+                      "Nguyen Van Thanh",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight
+                                .bold,
+                      ),
+                    ),
+                    Text(
+                      "Chuong Duong, Ha Noi",
+                      style: TextStyle(
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Container(
+                width: 60,
+                height: 40,
+                color: Colors.green,
+              ),
+
+              const SizedBox(width: 10),
+
+              Column(
+                mainAxisSize:
+                    MainAxisSize.min,
                 children: [
-                  Text(
-                    "data",
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight:
-                          FontWeight
-                              .bold,
-                    ),
+                  Container(
+                    width: 60,
+                    height: 40,
+                    color:
+                        Colors.yellow,
                   ),
-
-                  SizedBox(height: 20),
-
-                  Text(
-                    "Hahahahhahahah ahha ahahfa fk afalfajlflafaiofha afafafd sfjow3f iwfj wfo fwf wfowf jwof fowf wof jwofwofjw fw fowufowifow fw fwof ow fw fwif wof wo f",
-                    style: TextStyle(
-                      fontSize: 20,
-                    ),
-                  ),
+                  Text("20"),
                 ],
               ),
-            ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
