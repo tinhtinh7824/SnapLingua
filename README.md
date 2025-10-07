@@ -1,6 +1,11 @@
 # SnapLingua 📸🇬🇧
 Ứng dụng học từ vựng Tiếng Anh qua **nhận diện hình ảnh** (YOLOv10 → TFLite) và **xử lý ngôn ngữ tự nhiên**, thiết kế **offline-first** với MongoDB Realm, đồng bộ dữ liệu khi có mạng.
 
+
+cd backend 
+./mvnw spring-boot:run
+
+
 ## 🎯 Mục tiêu
 - Học từ vựng trực quan, sinh động, gắn với ngữ cảnh thực tế.
 - Cá nhân hóa lộ trình học theo tiến độ từng người.

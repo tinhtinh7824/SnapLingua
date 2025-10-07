@@ -1,0 +1,12 @@
+server:
+  port: 9090
+
+spring:
+  data:
+    mongodb:
+      uri: "mongodb+srv://snaplingua:TiNh2004@snaplingua-cluster.3hkrexg.mongodb.net/snaplingua?retryWrites=true&w=majority&ssl=true"
+
+logging:
+  level:
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.springframework.boot.context.config: DEBUG

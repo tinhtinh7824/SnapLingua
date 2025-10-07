@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="dean"
+        android:label="Snaplingua"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -19,6 +19,10 @@
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
+              />
+            <meta-data
+              android:name="com.google.android.gms.client_id"
+              android:value="814540077533-s5933hrtq89rk6it3qfar7d12h5hn75n.apps.googleusercontent.com"
               />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

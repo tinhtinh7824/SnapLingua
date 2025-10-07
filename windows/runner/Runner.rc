@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "dean" "\0"
+            VALUE "FileDescription", "Snaplingua" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "dean" "\0"
+            VALUE "InternalName", "snaplingua" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "dean.exe" "\0"
-            VALUE "ProductName", "dean" "\0"
+            VALUE "OriginalFilename", "snaplingua.exe" "\0"
+            VALUE "ProductName", "Snaplingua" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
