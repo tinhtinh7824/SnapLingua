@@ -76,6 +76,7 @@ class ReviewView extends GetView<ReviewController> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'reviewAddCategoryFab',
         onPressed: controller.onAddCategory,
         backgroundColor: AppColors.primaryAccent,
         elevation: 4,

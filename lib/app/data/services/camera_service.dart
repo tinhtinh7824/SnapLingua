@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
-import '../models/camera_model.dart';
+import 'package:snaplingua/app/data/models/realm/camera_model.dart';
+
 import 'realm_service.dart';
 
 class CameraService extends GetxService {

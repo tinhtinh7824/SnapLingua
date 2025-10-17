@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -27,7 +28,7 @@ class LearningTabView extends StatelessWidget {
               child: CircularProgressIndicator(
                 value: current / total,
                 strokeWidth: 8.w,
-                backgroundColor: Colors.white.withValues(alpha: 0.3),
+                backgroundColor: Colors.white.withOpacity(0.3),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -54,6 +55,7 @@ class LearningTabView extends StatelessWidget {
     required int total,
     String? title,
     String? imagePath,
+    double? devicePixelRatio,
   }) {
     final percentage = ((current / total) * 100).round();
     return Row(
@@ -106,12 +108,16 @@ class LearningTabView extends StatelessWidget {
         ),
         if (imagePath != null) ...[
           SizedBox(width: 12.w),
-          Image.asset(
-            imagePath,
-            width: 60.w,
-            height: 60.h,
-            errorBuilder: (context, error, stackTrace) {
-              return SizedBox(width: 60.w, height: 60.h);
+          Builder(
+            builder: (context) {
+              final ratio = devicePixelRatio ?? MediaQuery.of(context).devicePixelRatio;
+              return _buildOptimizedAsset(
+                imagePath: imagePath,
+                width: 60.w,
+                height: 60.h,
+                devicePixelRatio: ratio,
+                fallback: SizedBox(width: 60.w, height: 60.h),
+              );
             },
           ),
         ],
@@ -121,6 +127,8 @@ class LearningTabView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+
     return Scaffold(
       backgroundColor: const Color(0xFFE5FFFD),
       body: Column(
@@ -129,50 +137,57 @@ class LearningTabView extends StatelessWidget {
           Container(
             color: const Color(0xFFBBFFEE),
             child: SafeArea(
-              child: _buildHeader(),
+              child: _buildHeader(devicePixelRatio),
             ),
           ),
 
           // Scrollable content
           Expanded(
             child: SingleChildScrollView(
-                padding: EdgeInsets.all(20.w),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Card học với ảnh
-                    _buildLearningCard(),
-                    SizedBox(height: 20.h),
+                    // Card học với ảnh - flush with app bar
+                    _buildLearningCard(devicePixelRatio),
 
-                    // Học từ mới
-                    _buildVocabularyCard(),
-                    SizedBox(height: 20.h),
+                    // Content with padding
+                    Padding(
+                      padding: EdgeInsets.all(20.w),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Học từ mới
+                          _buildVocabularyCard(devicePixelRatio),
+                          SizedBox(height: 20.h),
 
-                    // Ôn tập ngay
-                    _buildReviewCard(),
-                    SizedBox(height: 16.h),
+                          // Ôn tập ngay
+                          _buildReviewCard(devicePixelRatio),
+                          SizedBox(height: 16.h),
 
-                    // Nhiệm vụ
-                    Center(
-                      child: Text(
-                        'Nhiệm vụ',
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.black87,
+                          // Nhiệm vụ
+                          Center(
+                            child: Text(
+                              'Nhiệm vụ',
+                              style: TextStyle(
+                                fontSize: 18.sp,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.black87,
 
-                        ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 16.h),
+
+                          // Nhiệm vụ tháng
+                          _buildMonthlyQuest(devicePixelRatio),
+                          SizedBox(height: 16.h),
+
+                          // Nhiệm vụ hàng ngày
+                          _buildDailyQuests(devicePixelRatio),
+                          SizedBox(height: 20.h),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 16.h),
-
-                    // Nhiệm vụ tháng
-                    _buildMonthlyQuest(),
-                    SizedBox(height: 16.h),
-
-                    // Nhiệm vụ hàng ngày
-                    _buildDailyQuests(),
-                    SizedBox(height: 20.h),
                   ],
                 ),
               ),
@@ -182,23 +197,29 @@ class LearningTabView extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(double devicePixelRatio) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildStatItem('assets/images/vay.png', '160', const Color(0xFFB8C3D1), Routes.shop),
-          _buildStatItem('assets/images/ngoc.png', '2', const Color(0xFF0571E6), Routes.shop),
-          _buildStatItem('assets/images/streak/streak6.png', '15', const Color(0xFF4E67F8), Routes.streak),
-          _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification),
+          _buildStatItem('assets/images/vay.png', '160', const Color(0xFFB8C3D1), Routes.shop, devicePixelRatio),
+          _buildStatItem('assets/images/ngoc.png', '2', const Color(0xFF0571E6), Routes.shop, devicePixelRatio),
+          _buildStatItem('assets/images/streak/streak6.png', '15', const Color(0xFF4E67F8), Routes.streak, devicePixelRatio),
+          _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification, devicePixelRatio),
         ],
       ),
     );
   }
 
 
-  Widget _buildStatItem(String imagePath, String value, Color textColor, String? route) {
+  Widget _buildStatItem(
+    String imagePath,
+    String value,
+    Color textColor,
+    String? route,
+    double devicePixelRatio,
+  ) {
     return GestureDetector(
       onTap: route != null
           ? () {
@@ -212,13 +233,12 @@ class LearningTabView extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Image.asset(
-              imagePath,
+            _buildOptimizedAsset(
+              imagePath: imagePath,
               width: 32.w,
               height: 32.h,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(Icons.error, size: 20.sp, color: Colors.red);
-              },
+              devicePixelRatio: devicePixelRatio,
+              fallback: Icon(Icons.error, size: 20.sp, color: Colors.red),
             ),
             if (value.isNotEmpty) ...[
               SizedBox(width: 4.w),
@@ -237,98 +257,111 @@ class LearningTabView extends StatelessWidget {
     );
   }
 
-  Widget _buildLearningCard() {
+  Widget _buildLearningCard(double devicePixelRatio) {
     return Container(
-      padding: EdgeInsets.all(15.w),
+      height: 140.h,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          stops: [0.0, 0.5, 1.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
             Color(0xFF027DE0),
             Color(0xFFB2FFF1),
             Color(0xFF02D099),
           ],
         ),
-        borderRadius: BorderRadius.circular(20.r),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16.r),
+          bottomRight: Radius.circular(16.r),
+        ),
       ),
-      child: Stack(
-        children: [
-          // Con chim bên trái
-          Positioned(
-            left: 55.w,
-            bottom: 20.h,
-            child: Image.asset(
-              'assets/images/chimcanhcut/chim_chupanh.png',
-              width: 54.w,
-              height: 54.h,
-              errorBuilder: (context, error, stackTrace) {
-                return const SizedBox();
-              },
-            ),
-          ),
-          // Con chim bên phải
-          Positioned(
-            right: 55.w,
-            bottom: 20.h,
-            child: Image.asset(
-              'assets/images/chimcanhcut/chim_chaomung.png',
-              width: 54.w,
-              height: 54.h,
-              errorBuilder: (context, error, stackTrace) {
-                return const SizedBox();
-              },
-            ),
-          ),
-          // Nội dung chính
-          Column(
-            children: [
-              Text(
-                'Gửi ảnh, học ngay từ mới!',
-                style: TextStyle(
-                  color: const Color(0xFF008BBE),
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w600,
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16.r),
+          bottomRight: Radius.circular(16.r),
+        ),
+        child: Stack(
+          children: [
+            // Penguin character positioned on the left
+            Positioned(
+              left: 15.w,
+              top: 10.h,
+              child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.rotationY(math.pi),
+              child: _buildOptimizedAsset(
+                imagePath: 'assets/images/chimcanhcut/chim_chupanh.png',
+                width: 176.w,
+                height: 176.h,
+                devicePixelRatio: devicePixelRatio,
+                fit: BoxFit.contain,
+                fallback: Container(
+                  width: 140.w,
+                  height: 140.h,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.camera_alt,
+                    size: 50.sp,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              SizedBox(height: 35.h),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AppWidgets.actionButton(
-                    text: 'Chụp ảnh',
-                    onPressed: () {
-                      // Đảm bảo controller được khởi tạo
-                      if (!Get.isRegistered<CameraDetectionController>()) {
-                        Get.lazyPut(() => CameraDetectionController());
-                      }
-                      // Gọi chức năng chụp ảnh
-                      CameraDetectionController.to.takePhoto();
-                    },
-                  ),
-                  SizedBox(width: 50.w),
-                  AppWidgets.actionButton(
-                    text: 'Chọn ảnh',
-                    onPressed: () {
-                      // Đảm bảo controller được khởi tạo
-                      if (!Get.isRegistered<CameraDetectionController>()) {
-                        Get.lazyPut(() => CameraDetectionController());
-                      }
-                      // Gọi chức năng chọn ảnh
-                      CameraDetectionController.to.pickFromGallery();
-                    },
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
-        ],
+          // Text and button on the right side
+          Positioned(
+            right: 10.w,
+            left: 170.w,
+            top: 0,
+            bottom: 0,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Gửi ảnh',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: const Color(0xFF008BBE),
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'học ngay từ mới!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: const Color(0xFF008BBE),
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                SizedBox(height: 12.h),
+                AppWidgets.actionButton(
+                  text: 'Gửi ảnh',
+                  onPressed: () {
+                    // Đảm bảo controller được khởi tạo
+                    if (!Get.isRegistered<CameraDetectionController>()) {
+                      Get.lazyPut(() => CameraDetectionController());
+                    }
+                    // Gọi chức năng chụp ảnh
+                    CameraDetectionController.to.takePhoto();
+                  },
+                ),
+              ],
+            ),
+          ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildVocabularyCard() {
+  Widget _buildVocabularyCard(double devicePixelRatio) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -373,25 +406,24 @@ class LearningTabView extends StatelessWidget {
           Positioned(
             right: 10.w,
             bottom: -30.h,
-            child: Image.asset(
-              'assets/images/chimcanhcut/chim_nhachoc.png',
+            child: _buildOptimizedAsset(
+              imagePath: 'assets/images/chimcanhcut/chim_nhachoc.png',
               width: 160.w,
               height: 160.h,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: 147.w,
-                  height: 147.h,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Icon(
-                    Icons.school,
-                    size: 40.sp,
-                    color: const Color(0xFF1CB0F6),
-                  ),
-                );
-              },
+              devicePixelRatio: devicePixelRatio,
+              fallback: Container(
+                width: 147.w,
+                height: 147.h,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Icon(
+                  Icons.school,
+                  size: 40.sp,
+                  color: const Color(0xFF1CB0F6),
+                ),
+              ),
             ),
           ),
         ],
@@ -399,7 +431,7 @@ class LearningTabView extends StatelessWidget {
     );
   }
 
-  Widget _buildReviewCard() {
+  Widget _buildReviewCard(double devicePixelRatio) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -417,25 +449,24 @@ class LearningTabView extends StatelessWidget {
           Positioned(
             left: 20.w,
             bottom: -30.h,
-            child: Image.asset(
-              'assets/images/chimcanhcut/chim_mung.png',
+            child: _buildOptimizedAsset(
+              imagePath: 'assets/images/chimcanhcut/chim_mung.png',
               width: 160.w,
               height: 160.h,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: 147.w,
-                  height: 147.h,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Icon(
-                    Icons.refresh,
-                    size: 40.sp,
-                    color: const Color(0xFF58CC02),
-                  ),
-                );
-              },
+              devicePixelRatio: devicePixelRatio,
+              fallback: Container(
+                width: 147.w,
+                height: 147.h,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Icon(
+                  Icons.refresh,
+                  size: 40.sp,
+                  color: const Color(0xFF58CC02),
+                ),
+              ),
             ),
           ),
 
@@ -469,7 +500,7 @@ class LearningTabView extends StatelessWidget {
     );
   }
 
-  Widget _buildMonthlyQuest() {
+  Widget _buildMonthlyQuest(double devicePixelRatio) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -502,17 +533,18 @@ class LearningTabView extends StatelessWidget {
         Positioned(
           right: 20.w,
           top: -40.h,
-          child: Image.asset(
-            'assets/images/chimcanhcut/chim_muadong5.png',
+          child: _buildOptimizedAsset(
+            imagePath: 'assets/images/chimcanhcut/chim_muadong5.png',
             width: 118.w,
             height: 118.h,
+            devicePixelRatio: devicePixelRatio,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDailyQuests() {
+  Widget _buildDailyQuests(double devicePixelRatio) {
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: AppWidgets.questGradientDecoration(),
@@ -532,6 +564,7 @@ class LearningTabView extends StatelessWidget {
             total: 5,
             title: 'Lưu 5 từ mới qua hình ảnh',
             imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
+            devicePixelRatio: devicePixelRatio,
           ),
           SizedBox(height: 16.h),
           _buildQuestProgressBar(
@@ -539,6 +572,7 @@ class LearningTabView extends StatelessWidget {
             total: 30,
             title: 'Ôn tập 30 từ vựng',
             imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
+            devicePixelRatio: devicePixelRatio,
           ),
           SizedBox(height: 16.h),
           _buildQuestProgressBar(
@@ -546,9 +580,42 @@ class LearningTabView extends StatelessWidget {
             total: 1,
             title: 'Đăng hình ảnh lên cộng đồng 1 lần',
             imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
+            devicePixelRatio: devicePixelRatio,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOptimizedAsset({
+    required String imagePath,
+    required double width,
+    required double height,
+    required double devicePixelRatio,
+    Widget? fallback,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    final safeRatio = devicePixelRatio <= 0 ? 1.0 : devicePixelRatio;
+    final targetWidthPx = (width * safeRatio).clamp(1, double.maxFinite).round();
+    final targetHeightPx = (height * safeRatio).clamp(1, double.maxFinite).round();
+    const maxDimensionPx = 512;
+
+    final cacheWidth = targetWidthPx > maxDimensionPx
+        ? maxDimensionPx
+        : targetWidthPx;
+    final cacheHeight = targetHeightPx > maxDimensionPx
+        ? (targetHeightPx * (cacheWidth / targetWidthPx)).round()
+        : targetHeightPx;
+
+    return Image.asset(
+      imagePath,
+      width: width,
+      height: height,
+      fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (context, error, stackTrace) => fallback ?? const SizedBox.shrink(),
     );
   }
 }

@@ -26,13 +26,19 @@ class CameraDetectionController extends GetxController {
       // Open custom camera with square frame
       final result = await Get.to<String>(() => const CustomCameraView());
 
-      if (result != null) {
-        print('📷 Đã chụp ảnh: $result');
-        // Crop ảnh thành hình vuông programmatically
-        await _cropImageToSquare(result);
-      } else {
+      if (result == null) {
         print('❌ Người dùng hủy chụp ảnh');
+        return;
       }
+
+      if (result == CustomCameraView.galleryResultTag) {
+        await pickFromGallery();
+        return;
+      }
+
+      print('📷 Đã chụp ảnh: $result');
+      // Crop ảnh thành hình vuông programmatically
+      await _cropImageToSquare(result);
     } catch (e) {
       print('❌ Lỗi khi chụp ảnh: $e');
       _showError('Không thể chụp ảnh: $e');

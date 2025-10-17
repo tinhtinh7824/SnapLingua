@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:realm/realm.dart';
-import '../models/vocabulary_model.dart';
+import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
+
 import 'realm_service.dart';
 
 class VocabularyService extends GetxService {

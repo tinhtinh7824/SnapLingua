@@ -12,7 +12,6 @@ class StreakView extends GetView<StreakController> {
     return Scaffold(
       backgroundColor: const Color(0xFFE5FFFD),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFE5FFFD),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),

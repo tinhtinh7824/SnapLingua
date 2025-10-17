@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/Users/admin/Desktop/snaplingua/windows"
+    "cmake.sourceDirectory": "/Users/admin/Desktop/snaplingua/windows",
+    "java.compile.nullAnalysis.mode": "automatic"
 }

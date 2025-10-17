@@ -38,9 +38,6 @@ class RealmConfig {
   //   );
   // }
 
-  static App? _app;
-  static App? get app => _app;
-
   static Realm? _realm;
 
   static Realm get realm {

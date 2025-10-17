@@ -12,6 +12,7 @@ class AppColors {
   static const Color backgroundLight = Color(0xFFE5FFFD);
   static const Color backgroundWhite = Colors.white;
   static const Color backgroundOverlay = Color(0x70FFFFFF);
+  static const Color appBarBackground = Color(0xFFBBFFEE);
 
   // Text colors
   static const Color textPrimary = Color(0xFF1A1A1A);

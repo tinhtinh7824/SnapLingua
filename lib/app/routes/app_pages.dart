@@ -24,6 +24,10 @@ import '../modules/notification/bindings/notification_binding.dart';
 import '../modules/notification/views/notification_view.dart';
 import '../modules/review/bindings/review_binding.dart';
 import '../modules/review/views/review_view.dart';
+import '../modules/community/bindings/community_binding.dart';
+import '../modules/community/views/community_view.dart';
+import '../modules/vocabulary_topic/bindings/vocabulary_topic_binding.dart';
+import '../modules/vocabulary_topic/views/vocabulary_topic_view.dart';
 import '../modules/vocabulary_list/bindings/vocabulary_list_binding.dart';
 import '../modules/vocabulary_list/views/vocabulary_list_view.dart';
 import '../modules/camera_detection/bindings/camera_detection_binding.dart';
@@ -102,6 +106,16 @@ class AppPages {
       name: _Paths.notification,
       page: () => const NotificationView(),
       binding: NotificationBinding(),
+    ),
+    GetPage(
+      name: _Paths.community,
+      page: () => const CommunityView(),
+      binding: CommunityBinding(),
+    ),
+    GetPage(
+      name: _Paths.vocabularyTopic,
+      page: () => const VocabularyTopicView(),
+      binding: VocabularyTopicBinding(),
     ),
     GetPage(
       name: _Paths.review,

@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:realm/realm.dart';
-import '../models/lesson_model.dart';
+import 'package:snaplingua/app/data/models/realm/lesson_model.dart';
+
 import 'realm_service.dart';
 
 class LessonService extends GetxService {

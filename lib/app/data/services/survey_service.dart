@@ -24,7 +24,6 @@ class SurveyService extends GetxService {
 
       final userId = _authService.currentUserId;
 
-      // Save survey response
       await _realmService.saveSurveyResponse(
         userId: userId,
         name: name,
@@ -36,16 +35,8 @@ class SurveyService extends GetxService {
         studyTime: studyTime,
       );
 
-      // Update user profile with survey data
       await _realmService.updateUser(userId, {
-        'name': name,
-        'gender': gender,
-        'birthDay': birthDay,
-        'birthMonth': birthMonth,
-        'birthYear': birthYear,
-        'purpose': purpose,
-        'studyTime': studyTime,
-        'surveyCompleted': true,
+        'displayName': name,
       });
 
       return {'success': true, 'message': 'Khảo sát đã được lưu thành công'};
@@ -56,58 +47,10 @@ class SurveyService extends GetxService {
   }
 
   Future<Map<String, dynamic>?> getUserSurveyData() async {
-    try {
-      if (!_authService.isLoggedIn) return null;
-
-      final user = _realmService.getCurrentUser();
-      if (user == null) return null;
-
-      return {
-        'name': user.name,
-        'gender': user.gender,
-        'birthDay': user.birthDay,
-        'birthMonth': user.birthMonth,
-        'birthYear': user.birthYear,
-        'purpose': user.purpose,
-        'studyTime': user.studyTime,
-        'surveyCompleted': user.surveyCompleted,
-      };
-    } catch (e) {
-      print('Get survey data error: $e');
-      return null;
-    }
+    return null;
   }
 
-  bool isSurveyCompleted() {
-    try {
-      if (!_authService.isLoggedIn) return false;
+  bool isSurveyCompleted() => false;
 
-      final user = _realmService.getCurrentUser();
-      return user?.surveyCompleted ?? false;
-    } catch (e) {
-      print('Check survey completion error: $e');
-      return false;
-    }
-  }
-
-  Future<void> resetSurvey() async {
-    try {
-      if (!_authService.isLoggedIn) return;
-
-      final userId = _authService.currentUserId;
-      await _realmService.updateUser(userId, {
-        'name': null,
-        'gender': null,
-        'birthDay': null,
-        'birthMonth': null,
-        'birthYear': null,
-        'purpose': null,
-        'studyTime': null,
-        'surveyCompleted': false,
-      });
-    } catch (e) {
-      print('Reset survey error: $e');
-      rethrow;
-    }
-  }
+  Future<void> resetSurvey() async {}
 }

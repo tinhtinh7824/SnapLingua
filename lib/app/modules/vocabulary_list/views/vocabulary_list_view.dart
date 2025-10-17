@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+
 import '../../../core/theme/app_colors.dart';
-import '../../../data/models/vocabulary_model.dart';
 import '../controllers/vocabulary_list_controller.dart';
 
 class VocabularyListView extends GetView<VocabularyListController> {
@@ -45,7 +45,7 @@ class VocabularyListView extends GetView<VocabularyListController> {
 
       // FAB - Add new word
       floatingActionButton: FloatingActionButton(
-        heroTag: 'vocab_add_button',
+        heroTag: 'vocabularyListFab',
         onPressed: controller.addNewWord,
         backgroundColor: const Color(0xFF1CB0F6),
         child: Icon(Icons.add, size: 30.sp, color: Colors.white),
@@ -119,10 +119,9 @@ class VocabularyListView extends GetView<VocabularyListController> {
   }
 
   /// Card hiển thị từ vựng
-  Widget _buildVocabularyCard(Vocabulary vocab) {
-    final status = controller.getWordStatus(vocab.id);
-    final statusColor = _getStatusColor(status);
-    final statusText = _getStatusText(status);
+  Widget _buildVocabularyCard(VocabularyItem vocab) {
+    final statusColor = _getStatusColor(vocab.status);
+    final statusText = _getStatusText(vocab.status);
 
     return Container(
       margin: EdgeInsets.only(bottom: 12.h),
@@ -218,17 +217,16 @@ class VocabularyListView extends GetView<VocabularyListController> {
             ),
 
           // Translation
-          if (vocab.translation != null && vocab.translation!.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(bottom: 4.h),
-              child: Text(
-                vocab.translation!,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: Colors.black87,
-                ),
+          Padding(
+            padding: EdgeInsets.only(bottom: 4.h),
+            child: Text(
+              vocab.translation,
+              style: TextStyle(
+                fontSize: 14.sp,
+                color: Colors.black87,
               ),
             ),
+          ),
 
           // Example
           if (vocab.example != null && vocab.example!.isNotEmpty)

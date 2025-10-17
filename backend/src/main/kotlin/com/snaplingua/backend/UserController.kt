@@ -1,8 +1,9 @@
 package com.snaplingua.backend
 
-import org.springframework.web.bind.annotation.*
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.*
 import java.time.Instant
+import java.util.UUID
 
 data class CreateUserRequest(
     val email: String,
@@ -23,8 +24,8 @@ class UserController(private val userRepository: UserRepository) {
             email = request.email,
             displayName = request.displayName,
             avatarUrl = request.avatarUrl,
-            role = "user",
-            status = "active",
+            role = UserRole.USER,
+            status = UserStatus.ACTIVE,
             createdAt = Instant.now()
         )
         return userRepository.save(user)
@@ -32,14 +33,20 @@ class UserController(private val userRepository: UserRepository) {
 
     @GetMapping("/{id}")
     fun getUserById(@PathVariable id: String): ResponseEntity<User> {
-        return userRepository.findById(id)
+        val userId = runCatching { UUID.fromString(id) }.getOrNull()
+            ?: return ResponseEntity.badRequest().build()
+
+        return userRepository.findById(userId)
             .map { ResponseEntity.ok(it) }
             .orElse(ResponseEntity.notFound().build())
     }
 
     @PutMapping("/{id}")
     fun updateUser(@PathVariable id: String, @RequestBody request: CreateUserRequest): ResponseEntity<User> {
-        return userRepository.findById(id)
+        val userId = runCatching { UUID.fromString(id) }.getOrNull()
+            ?: return ResponseEntity.badRequest().build()
+
+        return userRepository.findById(userId)
             .map { existingUser ->
                 val updatedUser = existingUser.copy(
                     email = request.email,
@@ -54,8 +61,11 @@ class UserController(private val userRepository: UserRepository) {
 
     @DeleteMapping("/{id}")
     fun deleteUser(@PathVariable id: String): ResponseEntity<Void> {
-        return if (userRepository.existsById(id)) {
-            userRepository.deleteById(id)
+        val userId = runCatching { UUID.fromString(id) }.getOrNull()
+            ?: return ResponseEntity.badRequest().build()
+
+        return if (userRepository.existsById(userId)) {
+            userRepository.deleteById(userId)
             ResponseEntity.noContent().build()
         } else {
             ResponseEntity.notFound().build()

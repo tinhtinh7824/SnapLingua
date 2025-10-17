@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../controllers/camera_detection_controller.dart';
 
+
 class CameraDetectionView extends GetView<CameraDetectionController> {
   const CameraDetectionView({super.key});
 
@@ -59,7 +60,7 @@ class CameraDetectionView extends GetView<CameraDetectionController> {
         color: const Color(0xFF1F1F39),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -98,7 +99,7 @@ class CameraDetectionView extends GetView<CameraDetectionController> {
         borderRadius: BorderRadius.circular(24.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -168,7 +169,7 @@ class CameraDetectionView extends GetView<CameraDetectionController> {
               borderRadius: BorderRadius.circular(16.r),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.3),
+                  color: Colors.grey.withOpacity(0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

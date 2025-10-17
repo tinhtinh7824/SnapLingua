@@ -45,12 +45,12 @@ data class UserDto(
 
 fun User.toDto(): UserDto {
     return UserDto(
-        userId = this.userId,
+        userId = this.userId.toString(),
         email = this.email,
         displayName = this.displayName,
         avatarUrl = this.avatarUrl,
-        role = this.role,
-        status = this.status,
+        role = this.role.name.lowercase(),
+        status = this.status.name.lowercase(),
         createdAt = this.createdAt,
         updatedAt = this.updatedAt
     )

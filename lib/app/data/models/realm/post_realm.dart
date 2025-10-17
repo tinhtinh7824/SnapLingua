@@ -1,6 +1,6 @@
 import 'package:realm/realm.dart';
 
-part 'post_realm.g.dart';
+part 'post_realm.realm.dart';
 
 @RealmModel()
 class _Post {

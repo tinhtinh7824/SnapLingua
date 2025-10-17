@@ -1,6 +1,6 @@
 import 'package:realm/realm.dart';
 
-part 'user_realm.g.dart';
+part 'user_realm.realm.dart';
 
 @RealmModel()
 class _User {

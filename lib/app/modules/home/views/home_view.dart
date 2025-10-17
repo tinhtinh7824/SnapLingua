@@ -1,49 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
 import '../controllers/home_controller.dart';
 import 'learning_tab_view.dart';
 import '../../review/views/review_view.dart';
+import '../../camera_detection/controllers/camera_detection_controller.dart';
+import '../../community/controllers/community_controller.dart';
+import '../../community/views/community_view.dart';
 
 class HomeView extends GetView<HomeController> {
   const HomeView({super.key});
-
-  /// Hiển thị hộp thoại chọn ảnh từ camera hoặc thư viện
-  void _showImageSourceDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.all(20.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Color(0xFF1CB0F6)),
-                title: const Text('Chụp ảnh'),
-                onTap: () {
-                  Navigator.pop(context);
-                  controller.pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo, color: Color(0xFF58CC02)),
-                title: const Text('Chọn ảnh từ thư viện'),
-                onTap: () {
-                  Navigator.pop(context);
-                  controller.pickImage(ImageSource.gallery);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +21,10 @@ class HomeView extends GetView<HomeController> {
           case 1:
             return const ReviewView();
           case 2:
-            return const Center(child: Text('Cộng đồng'));
+            if (!Get.isRegistered<CommunityController>()) {
+              Get.lazyPut(() => CommunityController());
+            }
+            return const CommunityView();
           case 3:
             return const Center(child: Text('Hồ sơ'));
           default:
@@ -99,7 +68,15 @@ class HomeView extends GetView<HomeController> {
         ),
       )),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showImageSourceDialog(context),
+        heroTag: 'homeCameraFab',
+        onPressed: () {
+          // Ensure CameraDetectionController is initialized
+          if (!Get.isRegistered<CameraDetectionController>()) {
+            Get.lazyPut(() => CameraDetectionController());
+          }
+          // Call takePhoto to open camera and detect vocabulary
+          CameraDetectionController.to.takePhoto();
+        },
         backgroundColor: const Color(0xFF1CB0F6),
         elevation: 4,
         child: Icon(Icons.camera_alt, size: 30.sp, color: Colors.white),

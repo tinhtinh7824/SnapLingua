@@ -1,6 +1,6 @@
 import 'package:realm/realm.dart';
 
-part 'personal_word_realm.g.dart';
+part 'personal_word_realm.realm.dart';
 
 @RealmModel()
 class _PersonalWord {

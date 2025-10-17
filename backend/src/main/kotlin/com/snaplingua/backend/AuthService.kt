@@ -28,8 +28,9 @@ class AuthService(
             val newUser = User(
                 email = request.email,
                 displayName = request.displayName,
-                role = "user",
-                status = "active",
+                avatarUrl = null,
+                role = UserRole.USER,
+                status = UserStatus.ACTIVE,
                 createdAt = Instant.now()
             )
 
@@ -48,7 +49,7 @@ class AuthService(
             // Tạo AuthProvider cho password
             val authProvider = AuthProvider(
                 userId = savedUser.userId,
-                provider = "password",
+                provider = ProviderType.PASSWORD,
                 providerUid = request.email,
                 emailVerified = false,
                 linkedAt = Instant.now()
@@ -84,14 +85,14 @@ class AuthService(
             val user = userOptional.get()
 
             // Kiểm tra trạng thái tài khoản
-            if (user.status == "blocked") {
+            if (user.status == UserStatus.BLOCKED) {
                 return AuthResponse(
                     success = false,
                     message = "Tài khoản đã bị khóa"
                 )
             }
 
-            if (user.status == "deleted") {
+            if (user.status == UserStatus.DELETED) {
                 return AuthResponse(
                     success = false,
                     message = "Tài khoản không tồn tại"
@@ -157,14 +158,14 @@ class AuthService(
                 val existingUser = userOptional.get()
 
                 // Kiểm tra trạng thái
-                if (existingUser.status == "blocked") {
+                if (existingUser.status == UserStatus.BLOCKED) {
                     return AuthResponse(
                         success = false,
                         message = "Tài khoản đã bị khóa"
                     )
                 }
 
-                if (existingUser.status == "deleted") {
+                if (existingUser.status == UserStatus.DELETED) {
                     return AuthResponse(
                         success = false,
                         message = "Tài khoản không tồn tại"
@@ -184,19 +185,19 @@ class AuthService(
                     email = request.email,
                     displayName = request.displayName,
                     avatarUrl = request.photoUrl,
-                    role = "user",
-                    status = "active",
+                    role = UserRole.USER,
+                    status = UserStatus.ACTIVE,
                     createdAt = Instant.now()
                 )
                 userRepository.save(newUser)
             }
 
             // Tìm hoặc tạo auth provider
-            val providerOptional = authProviderRepository.findByUserIdAndProvider(user.userId, "google")
+            val providerOptional = authProviderRepository.findByUserIdAndProvider(user.userId, ProviderType.GOOGLE)
             if (!providerOptional.isPresent) {
                 val authProvider = AuthProvider(
                     userId = user.userId,
-                    provider = "google",
+                    provider = ProviderType.GOOGLE,
                     providerUid = request.email, // hoặc có thể dùng Google UID
                     emailVerified = true, // Google đã verify
                     linkedAt = Instant.now()

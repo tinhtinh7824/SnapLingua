@@ -60,14 +60,13 @@ class AuthService extends GetxService {
 
       if (success) {
         // Create user profile
-        await _realmService.createUser(
+        final user = await _realmService.createUser(
           email: email,
-          name: name,
+          displayName: name,
         );
 
         // Save auth state with generated user ID
-        final userId = DateTime.now().millisecondsSinceEpoch.toString();
-        await _saveAuthState(userId, email);
+        await _saveAuthState(user.userId, email);
 
         return {'success': true, 'message': 'Đăng ký thành công'};
       } else {
@@ -97,9 +96,13 @@ class AuthService extends GetxService {
       final success = await _realmService.loginWithEmailPassword(email, password);
 
       if (success) {
-        // Save auth state with generated user ID
-        final userId = DateTime.now().millisecondsSinceEpoch.toString();
-        await _saveAuthState(userId, email);
+        var user = _realmService.getUserByEmail(email);
+
+        if (user == null) {
+          user = await _realmService.createUser(email: email);
+        }
+
+        await _saveAuthState(user.userId, email);
 
         return {'success': true, 'message': 'Đăng nhập thành công'};
       } else {

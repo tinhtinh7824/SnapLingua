@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
-import '../models/gamification_model.dart';
+import 'package:snaplingua/app/data/models/realm/gamification_model.dart';
+
 import 'realm_service.dart';
 
 class GamificationService extends GetxService {

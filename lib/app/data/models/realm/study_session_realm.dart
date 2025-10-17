@@ -1,6 +1,6 @@
 import 'package:realm/realm.dart';
 
-part 'study_session_realm.g.dart';
+part 'study_session_realm.realm.dart';
 
 @RealmModel()
 class _StudySession {

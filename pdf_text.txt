@@ -1,0 +1,930 @@
+PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG
+1. Mô tả chi tiết yêu cầu của hệ thống
+1.1. Yêu cầu chức năng
+1.1.1. Quản lý người dùng và xác thực
+- Hệ thống cho phép đăng ký và đăng nhập bằng email, đồng thời hỗ trợ liên kết tài khoản
+Google, Facebook.
+- Người dùng có thể cập nhật hồ sơ cá nhân bao gồm tên hiển thị và ảnh đại diện.
+- Về bảo mật, người dùng được phép đổi mật khẩu và sử dụng xác thực hai lớp qua ứng
+dụng xác thực hoặc email.
+1.1.2. Nhận diện qua camera (on-device)
+- Người dùng có thể chụp ảnh hoặc chọn ảnh từ thư viện.
+- Hệ thống thực hiện nhận diện trực tiếp trên thiết bị, phát hiện vật thể hoặc khung cảnh và
+sinh ra từ vựng tiếng Anh kèm phát âm, phiên âm, nghĩa tiếng Việt và ví dụ minh hoạ.
+- Người dùng được phép chọn từ vựng để lưu theo chủ đề. Hệ thống sẽ đề xuất ba chủ đề
+dựa trên nội dung ảnh, lịch sử học và các chủ đề được sử dụng gần đây. Có nút “Áp dụng
+cho tất cả” để gán chung chủ đề cho nhiều từ.
+- Khi phát hiện trùng lặp từ vựng, hệ thống sẽ tự động hợp nhất dữ liệu để tránh lặp lại.
+- Từ vựng đã chọn sẽ được lưu vào kho từ cá nhân và có thể chia sẻ lên cộng đồng nếu
+người dùng muốn.
+1.1.3. Học từ mới
+- Hệ thống đề xuất mặc định 15 từ mỗi ngày (người dùng có thể chỉnh số lượng). Người
+dùng có thể chấp nhận danh sách này hoặc tự chọn 15 từ để học. Toàn bộ quá trình học
+diễn ra qua 3 vòng.
+- Vòng 1: Mỗi từ hiển thị dưới dạng một thẻ gồm từ vựng tiếng Anh, phát âm, phiên âm,
+nghĩa tiếng. Vòng kết thúc khi học đủ 15 từ.
+- Vòng 2: Hệ thống xáo trộn 15 thẻ vào một hàng đợi (queue). Nếu vuốt phải nghĩa là đã
+thuộc, thẻ sẽ được loại khỏi queue. Nếu vuốt trái nghĩa là chưa thuộc, thẻ sẽ được đưa trở
+lại cuối queue. Vòng này kết thúc khi cả 15 từ đều đã từng được vuốt phải ít nhất một lần.
+- Vòng 3: Hệ thống sinh bài kiểm tra với nhiều dạng như trắc nghiệm nghĩa (MCQ), điền
+khuyết (Cloze), nối từ (Matching)… Các từ từng vuốt trái ở vòng 2 sẽ được ưu tiên xuất
+hiện trước. Cơ chế SRS (lặp lại ngắt quãng) được áp dụng:
+o Nếu trả lời đúng, stage tăng lên (tối đa 6), chuỗi sai được đặt lại, và hệ thống đặt
+ngày ôn tiếp theo dựa trên khoảng lặp.
+o Nếu trả lời sai, stage bị đưa về 0, chuỗi sai tăng lên, số lần quên cũng tăng và từ
+sẽ được hẹn ôn lại vào ngày hôm sau.
+Kết thúc vòng 3, hệ thống hiển thị tỷ lệ trả lời đúng ngay từ lần đầu.
+1.1.4. Ôn tập từ vựng
+- Pha 0: Hệ thống chọn ra những từ người dùng đã trả lời sai và những từ đến hạn ôn theo
+SRS, tối đa 150 từ mỗi ngày. Người dùng có thể chọn mini-phiên với số lượng 30, 50,
+100 hoặc 150 từ.
+- Pha 1: Sinh bài kiểm tra (ít nhất một câu hỏi cho mỗi từ). Kết quả trả lời lần đầu sẽ được
+ghi nhận để cập nhật SRS theo quy tắc đã thiết lập.
+- Pha 2: Người dùng được luyện tập lại các từ đã trả lời sai ở Pha 1 (q = 0). Kết quả ở bước
+này không làm thay đổi dữ liệu SRS.
+- Pha 3: Hệ thống tổng kết phần trăm số câu trả lời đúng ngay từ lần đầu và đưa ra gợi ý ôn
+tập cho phiên tiếp theo.
+1.1.5. Sổ từ cá nhân hoá & Quản lý từ
+- Danh sách từ hiển thị từ vựng kèm theo phiên âm, phát âm, nghĩa Tiếng Việt, ví dụ và
+trạng thái học.
+- Người dùng có thể gắn hoặc chỉnh sửa chủ đề cho từ vựng. Hệ thống hỗ trợ học theo chủ
+đề bằng flashcard.
+- Cho phép thêm, sửa hoặc xoá từ vựng. Hệ thống phát hiện trùng theo mặt chữ hoặc IPA
+và tự động gộp các thông tin như nghĩa, ảnh và lịch sử học.
+- Cho phép tìm toàn văn theo từ hoặc nghĩa trong kho từ vựng.
+1.1.6. Mục tiêu & Nhắc học
+- Hệ thống hiển thị header tiến độ ngày, bao gồm số từ mới còn lại, số từ đến hạn, streak.
+- Tạo ba nhiệm vụ hằng ngày gồm học từ mới, ôn tập, nhận diện qua camera hoặc tham gia
+cộng đồng.
+- Mỗi tháng, nếu người dùng tích lũy được ít nhất 20 điểm, hệ thống sẽ trao Huy hiệu
+tháng.
+- Hệ thống hỗ trợ nhắc học thông minh với hai khung giờ mặc định sáng và tối. Nhắc nhở
+có thể theo ngữ cảnh như ôn tập quá hạn, nhiệm vụ chưa hoàn thành hoặc chưa nhận diện
+ảnh.
+1.1.7. Cộng đồng đăng ảnh nhận diện
+- Người dùng có thể chụp hoặc chọn ảnh, hệ thống sẽ nhận diện đối tượng và từ. Người
+dùng chọn từ để lưu kèm nghĩa và ví dụ rồi đăng lên cộng đồng.
+- Trang cộng đồng hiển thị bài của bạn bè, gợi ý theo chủ đề học, độ hữu ích, mức độ
+tương tác cá nhân.
+- Người dùng có thể tương tác bằng cách thả tim một chạm, bình luận, lưu từ về sổ từ cá
+nhân hoặc báo cáo bài viết.
+- Có huy hiệu “Bài học hữu ích” để khuyến khích chia sẻ chất lượng.
+1.1.8. Bảng xếp hạng
+- Hệ thống tổ chức bảng xếp hạng theo giải đấu với nhiều hạng khác nhau. Mỗi giải đấu có
+khoảng 20 người tham gia.
+- Chu kỳ diễn ra theo tuần, sau khi kết thúc sẽ reset điểm. Một số người đứng đầu sẽ được
+thăng hạng, trong khi một số người cuối sẽ bị rớt hạng.
+- Bảng xếp hạng hiển thị avatar, tên, lượng XP trong tuần và streak. Khi mở bảng, người
+dùng có thể xem hồ sơ học của người khác bao gồm chủ đề thông tin tổng quan và ảnh
+cộng đồng.
+- Hệ thống có cơ chế chống gian lận bằng cách giới hạn XP theo dạng bài học.
+1.1.9. Nhóm học
+- Người dùng có thể tạo hoặc tham gia nhóm, với các loại nhóm công khai và nhóm cần
+duyệt. Trong nhóm có các vai trò gồm trưởng nhóm và thành viên.
+- Hệ thống cung cấp tổng XP của nhóm hiện tại và bảng xếp hạng nhóm theo XP, tạo động
+lực thi đua giữa các thành viên.
+- Có 5 mốc tổng XP của toàn nhóm theo tuần, tất cả các thành viên sẽ được nhận thưởng
+khi đạt 1 mốc nào đó.
+- Các thành viên trong nhóm có thể nhắn tin tương tác qua lại với nhau.
+- Về trưởng nhóm, nhóm có thể thiết lập quy tắc riêng, duyệt hoặc loại thành viên, cũng
+như chuyển quyền quản lý khi cần thiết.
+1.1.10. Gamification (XP/Level/Huy hiệu)
+- Người dùng nhận XP từ nhiều nguồn khác nhau như hoàn thành vòng học hoặc ôn tập,
+làm nhiệm vụ hằng ngày, đóng góp bài cộng đồng hữu ích và tham gia hoạt động trong
+nhóm.
+- Hệ thống hiển thị XP trong toàn bộ quá trình học. Người dùng có thể sử dụng streak
+freeze để giữ chuỗi học.
+- Hệ thống cung cấp các loại huy hiệu theo mốc thành tích, ví dụ đạt 100, 500, 1000 từ; giữ
+streak 7, 30 hoặc 100 ngày.
+1.2. Yêu cầu phi chức năng
+1.2.1. Hiệu năng
+ Thời gian phản hồi
+- Tải màn chính và chuyển tab trong khoảng 2 giây
+- Mở camera hiển thị khung hình trong dưới 1 giây; sau khi chụp, ảnh hiện ra trong khoảng
+0,5 giây.
+- Nhận diện trên thiết bị với ảnh độ phân giải 1080 px trả kết quả trong vòng khoảng 2 giây
+ở đa số trường hợp.
+- Lật hoặc vuốt flashcard phản hồi gần như tức thì.
+- Tải 10 bài đầu của feed cộng đồng trong khoảng 2 giây trên mạng di động thế hệ thứ tư.
+- Bảng xếp hạng cập nhật gần theo thời gian thực (thông tin đẩy về trong vài giây); tổng
+kết tuần hoàn tất trong vài phút.
+ Quy mô người dùng: Vận hành tốt ở mức từ 1000-5000 người dùng hằng tháng, tối đa
+khoảng 200 người dùng đồng thời.
+ Sử dụng tài nguyên
+- Dung lượng ứng dụng cơ bản khoảng 150 MB.
+- Bộ nhớ khi học hoặc ôn không vượt quá 300 MB.
+1.2.2. Độ tin cậy
+- Tỷ lệ phiên không bị văng ứng dụng đạt khoảng 99%, mục tiêu tiến tới 99,5%.
+- Ôn tập, Flashcard, lưu từ và gắn chủ đề dùng được khi không có mạng; dữ liệu được xếp
+hàng chờ và tự đồng bộ khi có mạng trở lại.
+- Ghi nhật ký lỗi tập trung; mỗi thao tác ghi dùng mã yêu cầu duy nhất để tránh ghi trùng;
+thử lại theo từng bước tăng dần; không mất dữ liệu nếu ứng dụng bị đóng đột ngột.
+1.2.3. Bảo mật và riêng tư
+- Hỗ trợ đăng nhập bằng email và mật khẩu (mật khẩu được băm an toàn như bcrypt hoặc
+Argon hai), hoặc đăng nhập bằng Google/Apple; phiên làm việc dùng chuỗi xác thực; có
+thể bật xác thực hai bước.
+- Sổ từ và lịch sử học mặc định là riêng tư; việc chia sẻ lên cộng đồng do người dùng quyết
+định. Ứng dụng chỉ xin quyền hệ thống khi thật sự cần (camera, thư viện ảnh, thông báo).
+- Có chính sách quyền riêng tư rõ ràng; hỗ trợ người dùng tải xuống và xóa dữ liệu của
+chính mình; mức tuân thủ tương tự các quy định bảo vệ dữ liệu phổ biến cho phạm vi đồ
+án.
+1.2.4. Yêu cầu kỹ thuật và tương thích
+- Giai đoạn đầu tập trung Android (từ Android 18+) bằng Flutter; iOS (từ iOS 14+) triển
+khai khi có thời gian.
+- Hoạt động tốt trên 3-4 giờ; tự phục hồi khi kết nối chập chờn; có tùy chọn chỉ tải mô hình
+hoặc ảnh khi dùng Wi-Fi.
+- Dùng Firebase cho đăng nhập, cơ sở dữ liệu, lưu trữ, theo dõi lỗi và thông báo đẩy.
+2. Phân tích và thiết kế hệ thống
+2.1. Các tác nhân trong hệ thống
+2.1.1. Người dùng
+- Đăng ký tài khoản: Người dùng có thể đăng ký tài khoản để sử dụng ứng dụng, tạo tài
+khoản bằng email hoặc thông qua đăng nhập bằng Google.
+- Đăng nhập: Người dùng sau khi đăng ký sẽ đăng nhập vào ứng dụng để có thể bắt đầu
+học từ vựng, lưu trữ từ vựng đã học, và theo dõi tiến trình học.
+- Quản lý tài khoản: Chỉnh sửa tên hiển thị, mật khẩu, avatar; thiết lập thông báo, quyền
+riêng tư; xuất/xoá dữ liệu cá nhân.
+- Học từ vựng: Chụp/chọn ảnh để nhận diện vật thể, sinh từ vựng kèm phiên âm, phát âm,
+ý nghĩa, ví dụ; chọn và lưu vào sổ từ, gán chủ đề.
+- Ôn tập: Ôn theo SRS (đến hạn/quá hạn), flashcard, quiz nhiều dạng.
+- Tra cứu & quản lý từ: Tìm kiếm, thêm/sửa/xoá thủ công; phát hiện trùng và merge; học
+theo chủ đề.
+- Theo dõi tiến độ: Xem header tiến độ ngày, streak; tỷ lệ đúng lần đầu, thống kê quiz, lịch
+ôn tiếp theo.
+- Cộng đồng & nhóm: Đăng ảnh (Locket-style), thả tim/bình luận/lưu từ; tham gia nhóm
+học và bảng xếp hạng tuần/ tháng.
+- Gamification: Nhận XP/Vảy/Ngọc, mở huy hiệu, dùng vật phẩm (streak freeze,
+booster…), nhận thưởng nhiệm vụ ngày/tháng.
+2.1.2. Quản trị viên
+- Quản lý người dùng & phân quyền: duyệt/khoá/mở khoá tài khoản.
+- Kiểm duyệt cộng đồng: duyệt/ẩn/bỏ ẩn bài; xử lý báo cáo (nhạy cảm/spam/sai sự
+thật/xâm phạm riêng tư); chặn nội dung/thiết bị vi phạm.
+- Quản lý nhóm học: xử lý khiếu nại, chuyển quyền Owner khi cần.
+- Bảng xếp hạng & chống gian lận: phát hiện spam thao tác/thiết bị lạ; xử lý vi phạm.
+- Gamification & cửa hàng: cấu hình nguồn XP, giá Vảy/Ngọc, phát hành/thu hồi vật
+phẩm, thiết lập sự kiện mùa/mini-event.
+- Từ điển & nội dung dùng chung: quản lý chủ đề hệ thống, whitelist/blacklist thuật ngữ
+không phù hợp.
+2.2. Xác định ca sử dụng
+2.2.1. Quản lý người dùng và xác thực
+- UC-01: Đăng ký tài khoản
+- UC-02: Đăng nhập/Đăng xuất
+- UC-03: Liên kết/Huỷ liên kết Google, Facebook
+- UC-04: Cập nhật hồ sơ cá nhân (tên hiển thị, avatar, giới thiệu ngắn)
+- UC-05: Đổi mật khẩu & bật xác thực hai lớp (2FA)
+2.2.2. Nhận diện qua camera (on-device)
+- UC-06: Chụp ảnh hoặc chọn ảnh từ thư viện
+- UC-07: Nhận diện on-device và sinh từ vựng (IPA, nghĩa, ví dụ, audio)
+- UC-08: Gợi ý & gán chủ đề
+- UC-09: Phát hiện trùng và hợp nhất dữ liệu từ vựng
+- UC-10: Lưu vào Sổ từ & (tuỳ chọn) chia sẻ lên cộng đồng
+2.2.3. Học từ mới
+- UC-11: Chấp nhận/danh sách đề xuất 15 từ hoặc tự chọn
+- UC-12: Vòng 1 – Preview (thẻ 1 mặt, duyệt đủ 15)
+- UC-13: Vòng 2 – Flashcard nhận diện (queue, vuốt phải/trái)
+- UC-14: Vòng 3 – Quiz (MCQ/Cloze/Matching/Nghe–chọn, chấm lần đầu, cập nhật SRS)
+- UC-15: Kết phiên học (hiển thị % đúng lần đầu, gợi ý mini-deck)
+2.2.4. Ôn tập từ vựng
+- UC-16: Tạo deck ôn “đến hạn/quá hạn” (30/50/100/150 từ)
+- UC-17: Làm quiz lần đầu và cập nhật SRS
+- UC-18: Củng cố lỗi cho các từ sai lần đầu
+- UC-19: Tổng kết phiên ôn & gợi ý ôn tiếp
+2.2.5. Sổ từ cá nhân hoá & quản lý từ
+- UC-20: Xem danh sách & chi tiết từ (IPA, nghĩa, ví dụ, audio)
+- UC-21: Gán/Chỉnh chủ đề; học nhanh theo chủ đề (Flashcard)
+- UC-22: Thêm/Sửa/Xoá thủ công; phát hiện trùng & merge
+- UC-23: Tìm kiếm toàn văn & lọc nâng cao
+2.2.6. Mục tiêu & nhắc học
+- UC-24: Xem header tiến độ ngày (từ mới còn lại, đến hạn, streak, heatmap)
+- UC-25: Daily Quests (khởi tạo 3 nhiệm vụ/ngày, theo dõi tiến độ)
+- UC-26: Monthly Challenge (đủ 20 điểm để nhận huy hiệu tháng)
+- UC-27: Nhắc học thông minh (khung giờ sáng/tối, nhắc theo ngữ cảnh)
+2.2.7. Cộng đồng đăng ảnh nhận diện
+- UC-28: Đăng ảnh kèm từ vựng, đặt quyền riêng tư
+- UC-29: Theo dõi feed đề xuất
+- UC-30: Tương tác bài viết (thả tim, bình luận, lưu từ, chia sẻ, báo cáo)
+- UC-31: Nhận huy hiệu “Bài học hữu ích”
+2.2.8. Bảng xếp hạng
+- UC-32: Tham gia bảng xếp hạng tuần/tháng
+- UC-33: Xem hồ sơ học công khai của người dùng khác
+- UC-34: Tổng kết tuần & thăng/hạ hạng tự động
+2.2.9. Nhóm học
+- UC-35: Tạo/Tham gia nhóm (công khai/riêng tư/duyệt; vai trò trưởng nhóm/thành viên)
+- UC-36: Đặt mục tiêu nhóm & nhắc lịch học chung
+- UC-37: Bảng xếp hạng nhóm & thống kê đóng góp
+- UC-38: Quản trị nhóm (duyệt bài, xử lý báo cáo, mời/kick, chuyển quyền)
+2.2.10. Gamification (XP/Level/Huy hiệu)
+- UC-39: Nhận XP theo hành động học/ôn/cộng đồng
+- UC-40: Theo dõi Level, lịch sử XP ngày/tuần, streak
+- UC-41: Sử dụng Streak Freeze
+- UC-42: Xem bộ sưu tập huy hiệu theo mốc thành tích
+2.2.11. Quản trị hệ thống (Admin)
+- UC-43: Kiểm duyệt nội dung & xử lý báo cáo cộng đồng
+- UC-44: Quản lý League & chống gian lận (giới hạn XP theo dạng bài, phát hiện
+spam/thiết bị bất thường, reset chu kỳ)
+- UC-45: Xử lý yêu cầu dữ liệu & tuân thủ (ẩn/ẩn danh bài khi xoá tài khoản)
+2.3. Biểu đồ ca sử dụng tổng quát
+Biểu đồ use case tổng quát
+2.4. Đặc tả chi tiết các ca sử dụng quan trọng
+2.4.1. UC-02: Đăng nhập / Đăng xuất
+Biểu đồ use case đăng nhập
+ Mô tả: Cho phép người dùng vào hệ thống bằng email/mật khẩu hoặc đăng nhập xã
+hội; cho phép đăng xuất.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết:
+- Đã có tài khoản hợp lệ trong hệ thống
+- Có kết nối internet (đăng nhập); đăng xuất không bắt buộc internet
+ Luồng sự kiện cơ bản:
+- Người dùng mở ứng dụng và chọn “Đăng nhập”.
+- Hệ thống hiển thị form đăng nhập.
+- Người dùng nhập email, mật khẩu (hoặc chọn Google/Facebook).
+- Hệ thống xác thực thông tin đăng nhập.
+- (Nếu bật 2FA) Hệ thống yêu cầu mã 2FA và người dùng nhập mã.
+- Hệ thống tạo phiên đăng nhập và chuyển tới màn hình chính.
+- (Đăng xuất) Người dùng chọn “Đăng xuất”; hệ thống xoá token/phiên cục bộ.
+ Luồng sự kiện thay thế:
+- Thông tin không hợp lệ/ tài khoản bị khoá:
+o Hệ thống hiển thị lỗi tương ứng (sai mật khẩu, tài khoản khoá…).
+o Người dùng thử lại hoặc dùng “Quên mật khẩu”.
+- Không có mạng: Hệ thống báo cần kết nối internet để đăng nhập.
+ Điều kiện sau: Người dùng đăng nhập thành công và có phiên hoạt động; hoặc đăng
+xuất và phiên bị huỷ.
+ Yêu cầu đặc biệt:
+- Thời gian xác thực ≤ 2 giây trong điều kiện mạng 4G.
+- Token phiên được bảo vệ an toàn; khoá sau N lần sai liên tiếp.
+2.4.2. UC-02: Chụp/ Chọn ảnh
+Biểu đồ use case chụp/ chọn ảnh
+ Mô tả: Cho phép người dùng chụp ảnh hoặc chọn ảnh từ thư viện để nhận diện.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết:
+- Ứng dụng có quyền Camera/Thư viện (nếu chưa có, sẽ xin quyền)
+- Thiết bị còn đủ dung lượng và không quá nóng
+ Luồng sự kiện cơ bản:
+- Người dùng mở chức năng Camera.
+- Hệ thống hiển thị khung ngắm (≤ 1 giây).
+- Người dùng bấm chụp (hoặc mở Thư viện để chọn ảnh).
+- Hệ thống hiển thị ảnh xem lại và nút “Dùng ảnh này”.
+- Người dùng xác nhận để chuyển sang bước nhận diện.
+ Luồng sự kiện thay thế:
+- Chưa cấp quyền:Hệ thống hiện màn hình xin quyền; nếu từ chối, hướng dẫn mở cài đặt.
+- Ảnh quá lớn/định dạng lạ: Hệ thống nén/chuyển đổi định dạng hoặc báo lỗi và đề nghị
+ảnh khác.
+ Điều kiện sau: Ảnh hợp lệ sẵn sàng cho bước nhận diện.
+ Yêu cầu đặc biệt: Hỗ trợ crop về tỉ lệ mong muốn; thời gian hiển thị preview ≤ 1 giây.
+2.4.3. UC-07: Nhận diện on-device & sinh từ vựng
+Biểu đồ use case nhận diện on-device & sinh từ vựng
+ Mô tả: Nhận diện đối tượng/khung cảnh trên thiết bị, ánh xạ sang từ vựng, lấy IPA/ý
+nghĩa/ví dụ/audio.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết:
+- Đã có ảnh đầu vào (UC-06)
+- Mô hình ML & từ điển cục bộ đã tải; nếu chưa, cần mạng để tải lần đầu
+ Luồng sự kiện cơ bản:
+- Hệ thống chạy mô hình on-device và trả về top-k nhãn.
+- Hệ thống ánh xạ nhãn → từ vựng; lấy IPA, nghĩa, ví dụ, audio.
+- Hệ thống gợi ý 3 chủ đề (theo nội dung ảnh, lịch sử, gần đây).
+- Người dùng tick chọn từ muốn lưu, chọn chủ đề (có “Áp dụng cho tất cả”).
+- Người dùng bấm “Lưu” (và có thể bật chia sẻ cộng đồng).
+- Hệ thống phát hiện trùng và hợp nhất thông tin nếu cần; lưu vào sổ từ.
+ Luồng sự kiện thay thế:
+- Độ tự tin thấp/không nhận diện được: Hệ thống gợi ý chụp lại/ chọn ảnh khác/ nhập tay.
+- Không tìm thấy mục từ trong từ điển cục bộ: Dùng bản ghi tạm (nhãn).
+- Mất mạng khi cần đồng bộ: Hệ thống lưu tạm cục bộ và xếp hàng đồng bộ khi có mạng.
+ Điều kiện sau: Từ được thêm vào sổ từ cá nhân, tránh trùng lặp.
+ Yêu cầu đặc biệt:
+- Thời gian nhận diện ảnh 1080px ≈ ≤ 2 giây (đa số trường hợp).
+- Hợp nhất theo chữ/IPA, bảo toàn lịch sử học/ảnh đính kèm.
+2.4.4. UC-11: Chọn danh sách học trong ngày
+Biểu đồ use case chọn danh sách học trong ngày
+ Mô tả: Khởi tạo bộ 15 từ (mặc định) cho phiên học trong ngày.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết: Người dùng đã có sổ từ; đã đăng nhập
+ Luồng sự kiện cơ bản:
+- Hệ thống đề xuất 15 từ mặc định (điều chỉnh được).
+- Người dùng chấp nhận danh sách hoặc tự chọn từ khác.
+- Hệ thống khóa danh sách và chuyển sang Vòng 1.
+ Luồng sự kiện thay thế:
+- Số từ ít hơn 15: Hệ thống đề xuất bổ sung hoặc cho phép học với số hiện có.
+ Điều kiện sau: Danh sách học hôm nay được thiết lập.
+ Yêu cầu đặc biệt: Tránh trùng với các từ đến hạn ôn trong ngày (nếu bật tuỳ chọn tránh
+trùng).
+2.4.5. UC-14: Vòng 3 – Quiz & cập nhật SRS
+Biểu đồ use case vòng 3 – Quiz & cập nhật SRS
+ Mô tả: Sinh bài kiểm tra (MCQ/Cloze/Matching/Nghe-chọn…), chấm lần đầu và cập
+nhật SRS.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết:
+- Đã hoàn tất Vòng 1 và Vòng 2 cho bộ từ của ngày
+- Có cấu hình SRS trong máy
+ Luồng sự kiện cơ bản:
+- Hệ thống tạo bài quiz, ưu tiên các từ từng vuốt trái ở Vòng 2.
+- Người dùng trả lời từng câu; hệ thống chấm ngay.
+- Nếu đúng: stage tăng (tối đa 6), đặt lại chuỗi sai, lịch ôn giãn ra.
+- Nếu sai: stage về 0, tăng chuỗi sai & số lần quên, hẹn ôn lại ngày mai.
+- Sau khi làm xong, hệ thống hiển thị % đúng ngay lần đầu, gợi ý mini-deck.
+ Luồng sự kiện thay thế:
+- Người dùng thoát giữa chừng: Hệ thống lưu tiến độ; lần sau tiếp tục.
+ Điều kiện sau: Thông số SRS được cập nhật; có thống kê hiệu suất phiên.
+ Yêu cầu đặc biệt: Phản hồi khi lật/ chọn đáp án gần như tức thì.
+2.4.6. UC-14: Phiên ôn tập SRS
+Biểu đồ use case Phiên ôn tập SRS
+ Mô tả: Tạo deck ôn “đến hạn/quá hạn” (30/50/100/150), làm quiz lần đầu để cập nhật
+SRS, sau đó củng cố lỗi.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết: Có từ đến hạn/quá hạn theo SRS
+ Luồng sự kiện cơ bản:
+- Người dùng chọn kích thước mini-phiên (30/50/100/150).
+- Hệ thống sinh bài quiz, đảm bảo mỗi từ có ít nhất 1 câu.
+- Hệ thống chấm kết quả lần đầu và cập nhật SRS (giống UC-14).
+- Hệ thống gom các từ sai (q=0) thành phần củng cố; người dùng luyện lại.
+- Hệ thống tổng kết % đúng lần đầu và gợi ý ôn tiếp/ lịch ngày mai.
+ Luồng sự kiện thay thế:
+- Không có từ đến hạn: Hệ thống gợi ý học mới hoặc ôn theo chủ đề.
+ Điều kiện sau: SRS cập nhật theo kết quả lần đầu; người dùng nhận thống kê/ gợi ý.
+ Yêu cầu đặc biệt: Giới hạn tối đa 150 từ/ngày để giữ chất lượng ôn.
+2.4.7. UC-28: Đăng ảnh nhận diện lên cộng đồng
+Biểu đồ use case Đăng ảnh nhận diện lên cộng đồng
+ Mô tả: Đăng bài kèm ảnh, từ vựng đã nhận diện, nghĩa/ví dụ, thiết lập quyền riêng tư.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết: Đăng nhập; có mạng; ảnh & từ đã được chọn/biên tập
+ Luồng sự kiện cơ bản:
+- Người dùng mở màn “Đăng bài”, chọn ảnh và các từ kèm nghĩa/ví dụ.
+- Người dùng đặt quyền riêng tư (công khai/ bạn bè/ nhóm).
+- Người dùng bấm “Đăng”.
+- Hệ thống lưu bài, cập nhật feed; cộng XP/huy hiệu nếu đủ điều kiện.
+ Luồng sự kiện thay thế:
+- Phát hiện nội dung nhạy cảm/vi phạm: Hệ thống cảnh báo, cho phép sửa/ huỷ; có thể
+đưa vào hàng duyệt.
+- Mất mạng: Hệ thống xếp hàng đăng bài, tự gửi khi có mạng.
+ Điều kiện sau: Bài xuất hiện trong feed theo phạm vi đã chọn.
+ Yêu cầu đặc biệt: Ảnh/metadata được tối ưu kích thước; thời gian đăng ≤ 2 giây trên
+4G (không tính hàng chờ).
+2.4.8. UC-32: Tham gia bảng xếp hạng tuần
+Biểu đồ use Tham gia bảng xếp hạng tuần
+ Mô tả: Người dùng tham gia league ~20 người, tích luỹ XP trong tuần; hệ thống reset và
+thăng/hạ hạng.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết: Đã đăng nhập; chấp nhận điều khoản league
+ Luồng sự kiện cơ bản:
+- Người dùng chọn “Tham gia League”.
+- Hệ thống ghép vào bảng phù hợp (mức hạng, múi giờ).
+- Trong tuần, hệ thống cộng XP theo hoạt động học/ôn/cộng đồng.
+- Kết thúc tuần, hệ thống tổng kết, thăng hạng top, hạ hạng bottom.
+- Hệ thống hiển thị bảng mới/ phần thưởng tuần.
+ Luồng sự kiện thay thế:
+- Phát hiện dấu hiệu gian lận: Hệ thống giới hạn XP loại hoạt động/ gắn cờ kiểm tra.
+ Điều kiện sau: Người dùng có xếp hạng tuần & lịch sử XP/ phần thưởng.
+ Yêu cầu đặc biệt: Cập nhật gần thời gian thực (đẩy về trong vài giây).
+2.4.9. UC-35: Tạo/Tham gia nhóm học
+Biểu đồ use Tạo/Tham gia nhóm học
+ Mô tả: Tạo nhóm, mời/tham gia, xem XP nhóm, đạt mốc thưởng chung.
+ Tác nhân chính: Người dùng
+ Điều kiện tiên quyết: Đã đăng nhập
+ Luồng sự kiện cơ bản:
+- Người dùng tạo nhóm, đặt tên, chọn loại (công khai/ cần duyệt).
+- Hệ thống tạo nhóm và gán người tạo làm Trưởng nhóm.
+- Thành viên khác tìm/ gửi yêu cầu tham gia hoặc nhận lời mời.
+- Hệ thống duyệt/ tự động thêm tuỳ theo loại nhóm.
+- Nhóm hiển thị tổng XP tuần, mốc 1–5; đạt mốc thì phát thưởng cho tất cả.
+ Luồng sự kiện thay thế:
+- Yêu cầu tham gia bị từ chối: Người dùng nhận thông báo và có thể thử nhóm khác.
+- Chuyển quyền quản lý: Trưởng nhóm chỉ định thành viên khác.
+ Điều kiện sau: Người dùng thuộc nhóm/ quản lý nhóm; mốc thưởng hoạt động.
+ Yêu cầu đặc biệt: Chống spam mời nhóm; giới hạn số nhóm/ ngày.
+2.4.10. UC-43: Kiểm duyệt nội dung & xử lý báo cáo
+Biểu đồ use Kiểm duyệt nội dung & xử lý báo cáo
+ Mô tả: Duyệt/ẩn/bỏ ẩn bài cộng đồng, xử lý báo cáo vi phạm, ghi log & thông bá
+ Tác nhân chính: Admin
+ Điều kiện tiên quyết: Quyền Admin; có hàng đợi báo cáo/ bộ lọc rủi ro
+ Luồng sự kiện cơ bản:
+- Admin mở hàng đợi báo cáo hoặc danh sách bài flag tự động.
+- Admin xem chi tiết bài, lịch sử chỉnh sửa/ báo cáo.
+- Admin chọn hành động: Ẩn/Bỏ ẩn/Xoá; chọn lý do.
+- Hệ thống áp dụng, ghi log, thông báo tới người đăng & người báo cáo.
+- Với vi phạm nặng, hệ thống kích hoạt biện pháp bổ sung (khoá tạm tài khoản/ thiết bị).
+ Luồng sự kiện thay thế:
+- Báo cáo sai sự thật/ lạm dụng: Hệ thống ghi nhận và có thể hạn chế quyền báo cáo của
+người dùng đó.
+ Điều kiện sau: Nội dung được xử lý đúng quy trình; dữ liệu log đầy đủ.
+ Yêu cầu đặc biệt: Thời gian phản hồi SLA nội bộ; tuân thủ ẩn danh/ gỡ bỏ theo yêu cầu
+xoá tài khoản.
+2.5. Biểu đồ lớp
+Biểu đồ lớp tổng quát
+2.5.1. Danh sách các bảng cơ sở dữ liệu
+STT Tên bảng Mô tả
+1 users Chứa thông tin tài khoản và trạng thái người dùng
+2 auth_providers Liên kết đăng nhập: password/Google/Facebook cho từng
+user
+3 user_security Cấu hình bảo mật: hash/2FA/mốc đổi mật khẩu
+4 device_tokens Thiết bị & push token để gửi thông báo
+5 badges Huy hiệu (cũng là sticker) và điều kiện mở khoá
+6 user_badges Quan hệ người dùng sở hữu huy hiệu/sticker
+7 photos Ảnh vuông 1:1 đã chuẩn hoá của người dùng
+8 detections Bản ghi kết quả nhận diện (model, JSON bbox/label) trên ảnh
+9 detection_words Các nhãn phát hiện và ánh xạ về từ điển
+10 dictionary_words Từ điển lõi: headword, IPA, nghĩa, audio…
+11 personal_words Kho từ cá nhân + trạng thái SRS (stage, due, đếm quên)
+12 topics Chủ đề học (hệ thống hoặc do người dùng tạo)
+13 personal_word_topics Gán N–N: từ cá nhân ↔ chủ đề
+14 word_merge_map Lịch sử hợp nhất các mục từ điển trùng
+15 study_sessions Phiên học/ôn (new/review), số lượng và thời gian
+16 session_items Các câu hỏi/thẻ trong một phiên; ghi kết quả lần đầu
+17 daily_progress Tiến độ theo ngày: mục tiêu, đã học, đến hạn, streak, XP
+18 user_goals Thiết lập mục tiêu/ngưỡng nhắc học & múi giờ
+19 posts Bài đăng cộng đồng (ảnh từ photos, caption, quyền xem)
+20 post_words Snapshot từ vựng gắn với bài đăng (giữ nghĩa/ví dụ lúc đăng)
+21 post_likes Lượt thả tim bài viết
+22 post_comments Bình luận bài viết (text hoặc sticker = badge)
+23 post_reports Báo cáo vi phạm bài viết, trạng thái xử lý
+24 groups Nhóm học (tên, mô tả, người tạo, trạng thái)
+25 group_members Thành viên nhóm, vai trò và trạng thái
+26 group_messages Tin nhắn nhóm (text hoặc sticker); ràng buộc sở hữu badge
+27 league_tiers Các hạng giải đấu (thứ tự/xp cap rule)
+28 league_cycles Chu kỳ tuần của giải đấu theo từng hạng
+29 league_members Thành viên trong chu kỳ: XP tuần, rank, thăng/rớt hạng
+30 xp_transactions Nhật ký điểm XP theo hành động học/ôn/cộng đồng…
+31 items Vật phẩm cửa hàng (streak freeze, booster, gem…)
+32 user_inventory Kho vật phẩm người dùng và số lượng
+33 notification_settings Cài đặt nhận thông báo (giờ sáng/tối, cho phép ngữ cảnh)
+34 notifications Lịch sử thông báo đã gửi/đọc cho từng người dùng
+35 admin_actions Nhật ký thao tác quản trị (ẩn bài, khoá/mở khoá, cảnh báo)
+2.5.2. Danh sách các bảng cơ sở dữ liệu
+ Table users
+STT Field Type Required Mô tả
+1 user_id UUID Có Mã người dùng (PK)
+2 email VARCHAR(255) Không Email (UNIQUE, cho phép NULL)
+4 display_name VARCHAR(100) Không Tên hiển thị
+5 avatar_url TEXT Không Ảnh đại diện
+6 role VARCHAR(20) Có user | admin
+7 status VARCHAR(20) Có active | blocked | deleted
+10 created_at TIMESTAMPTZ Có Ngày tạo
+11 updated_at TIMESTAMPTZ Không Ngày cập nhật
+ Table auth_providers
+STT Field Type Required Mô tả
+1 provider_id UUID Có PK
+2 user_id UUID Có FK → users
+3 provider VARCHAR(20) Có password | google | facebook
+4 provider_uid VARCHAR(255) Có ID từ nhà cung cấp
+5 email_verified BOOLEAN Có Đã xác minh email?
+6 linked_at TIMESTAMPTZ Có Ngày liên kết
+ Table user_security
+STT Field Type Required Mô tả
+1 user_id UUID Có PK = FK → users
+2 password_hash TEXT Không Hash mật khẩu (bcrypt/argon2)
+3 two_factor_enabled BOOLEAN Có Bật 2FA
+4 two_factor_method VARCHAR(20) Không app | email
+5 two_factor_secret TEXT Không Secret/TOTP (mã hoá)
+6 last_password_change TIMESTAMPTZ Không Lần đổi gần nhất
+ Table device_tokens
+STT Field Type Required Mô tả
+1 token_id UUID Có PK
+2 user_id UUID Có FK → users
+3 device_type VARCHAR(20) Có android | ios
+4 device_id VARCHAR(128) Không Định danh thiết bị
+5 fcm_token TEXT Có Token FCM/APNS
+6 last_active_at TIMESTAMPTZ Không Hoạt động gần nhất
+7 created_at TIMESTAMPTZ Có Ngày tạo
+ Table dictionary_words
+STT Field Type Required Mô tả
+1 word_id UUID Có PK
+2 headword VARCHAR(120) Có Từ tiếng Anh
+3 normalized_headword VARCHAR(120) Có Dạng chuẩn hoá (UNIQUE)
+4 ipa VARCHAR(120) Không Phiên âm IPA
+5 pos VARCHAR(30) Không Từ loại
+6 meaning_vi TEXT Có Nghĩa tiếng Việt (chính)
+7 example_en TEXT Không Ví dụ EN
+8 example_vi TEXT Không Ví dụ VI
+9 audio_url TEXT Không Phát âm
+10 image_url TEXT Không Ảnh minh hoạ
+11 created_by VARCHAR(20) Có system | user
+12 created_at TIMESTAMPTZ Có Ngày tạo
+ Table topics
+STT Field Type Required Mô tả
+1 topic_id UUID Có PK
+2 name VARCHAR(80) Có Tên chủ đề
+3 icon TEXT Không Icon hiển thị
+4 owner_id UUID Không NULL = chủ đề hệ thống; khác NULL = của
+user (FK → users)
+5 visibility VARCHAR(20) Có public | private
+6 created_at TIMESTAMPTZ Có Ngày tạo
+ Table personal_words
+STT Field Type Required Mô tả
+1 personal_word_id UUID Có PK
+2 user_id UUID Có FK → users
+3 word_id UUID Không FK → dictionary_words (NULL
+nếu nhập tay)
+4 custom_headword VARCHAR(120) Không Từ tự nhập
+5 custom_ipa VARCHAR(120) Không IPA tự nhập
+6 custom_meaning_vi TEXT Không Nghĩa tự nhập
+7 status VARCHAR(20) Có learning | learned | archived
+8 source VARCHAR(20) Có camera | manual | community |
+import
+9 source_photo_id UUID Không FK → photos
+10 srs_stage INTEGER Có Stage 0–6
+11 srs_ease INTEGER Có Ease×1000 (vd 2500)
+12 srs_interval_days INTEGER Có Khoảng lặp (ngày)
+13 srs_due_at TIMESTAMPTZ Có Ngày đến hạn ôn
+14 repetitions INTEGER Có Số lần ôn thành công
+15 wrong_streak INTEGER Có Chuỗi sai hiện tại
+16 forget_count INTEGER Có Tổng số lần quên
+17 last_reviewed_at TIMESTAMPTZ Không Ôn gần nhất
+18 created_at TIMESTAMPTZ Có Ngày thêm
+ Table personal_word_topics
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 personal_word_id UUID Có FK → personal_words
+3 topic_id UUID Có FK → topics
+4 is_primary BOOLEAN Có Chủ đề chính?
+5 created_at TIMESTAMPTZ Có Ngày gán
+ Table word_merge_map
+STT Field Type Required Mô tả
+1 merge_id UUID Có PK
+2 source_word_id UUID Có Từ bị gộp (FK → dictionary_words)
+3 target_word_id UUID Có Từ chuẩn (FK → dictionary_words)
+4 reason VARCHAR(120) Không Lý do trùng
+5 merged_at TIMESTAMPTZ Có Ngày gộp
+ Table photos
+STT Field Type Required Mô tả
+1 photo_jd UUID Có Khoá chính ảnh
+2 user_id UUID Không FK → users.user_id (ON
+DELETE SET NULL) để ẩn danh khi
+xoá tài khoản
+3 image_url TEXT Có Đường dẫn file ảnh vuông đã chuẩn
+hoá
+3 width INTEGER Có Chiều rộng (== height)
+4 height INTEGER Có Chiều cao (== width)
+6 format VARCHAR(10) Có Định dạng: jpg/jpeg/png/webp
+7 size_bytes INTEGER Không Kích thước file (bytes)
+8 source VARCHAR(20) Có camera | gallery
+9 taken_at TIMESTAMPTZ Không Thời điểm chụp (EXIF/nguời dùng)
+10 uploaded_at TIMESTAMPTZ Có Ngày tải lên (mặc định NOW())
+11 exif JSONB Không Metadata EXIF đã parse (optional)
+12 checksum_sha256 CHAR(64) Không Hash nội dung để chống trùng
+(UNIQUE, nullable)
+ Table detections
+STT Field Type Required Mô tả
+1 detection_id UUID Có PK
+2 photo_id UUID Có FK → photos
+3 model_version VARCHAR(40) Có Phiên bản YOLO/TFLite
+4 result_json JSONB Có Bbox/label/score
+5 created_at TIMESTAMPTZ Có Ngày tạo
+ Table detection_words
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 detection_id UUID Có FK → detections
+3 label VARCHAR(120) Có Nhãn (vd zebra)
+4 confidence INTEGER Có 0–1000 (×1000)
+5 mapped_word_id UUID Không FK → dictionary_words
+6 bbox JSONB Không Toạ độ
+7 selected BOOLEAN Có User đã chọn để lưu?
+8 created_at TIMESTAMPTZ Có Ngày tạo
+ Table study_sessions
+STT Field Type Required Mô tả
+1 session_id UUID Có PK
+2 user_id UUID Có FK → users
+3 type VARCHAR(20) Có new | review
+4 planned_count INTEGER Có Số từ dự kiến (15/30/50/100/150)
+5 completed_count INTEGER Có Đã hoàn thành
+6 first_try_accuracy INTEGER Không % đúng lần đầu (0–100)
+7 started_at TIMESTAMPTZ Có Bắt đầu
+8 ended_at TIMESTAMPTZ Không Kết thúc
+ Table session_items
+STT Field Type Required Mô tả
+1 item_id UUID Có PK
+2 session_id UUID Có FK → study_sessions
+3 personal_word_id UUID Có FK → personal_words
+4 round INTEGER Có 1/2/3 (học mới) hoặc 1 (ôn)
+5 question_type VARCHAR(20) Có flashcard | mcq | cloze | matching |
+listening
+6 first_try_correct BOOLEAN Có Đúng lần đầu?
+7 attempts_count INTEGER Có Số lần thử
+8 score INTEGER Không Điểm
+9 payload JSONB Không Dữ liệu câu hỏi/đáp án
+10 created_at TIMESTAMPTZ Có Ngày ghi
+ Table daily_progress
+STT Field Type Required Mô tả
+1 progress_id UUID Có PK
+2 user_id UUID Có FK → users
+3 date TIMESTAMPTZ Có Ngày (00:00)
+4 new_target INTEGER Có Mục tiêu từ mới/ngày
+5 new_learned INTEGER Có Đã học mới
+6 review_due INTEGER Có Đến hạn ôn
+7 review_done INTEGER Có Đã ôn
+8 streak INTEGER Có Chuỗi ngày học
+9 xp_gained INTEGER Có XP hôm nay
+ Table user_goals
+STT Field Type Required Mô tả
+1 user_id UUID Có PK = FK → users
+2 daily_new_target INTEGER Có Mặc định 15 (tuỳ chỉnh)
+3 tz VARCHAR(64) Có Múi giờ
+4 remind_morning VARCHAR(5) Không HH:mm
+5 remind_evening VARCHAR(5) Không HH:mm
+6 smart_remind BOOLEAN Có Nhắc theo ngữ cảnh
+ Table posts
+STT Field Type Required Mô tả
+1 post_id UUID Có PK
+2 user_id UUID Có FK → users
+3 photo_url TEXT Có Ảnh
+4 caption TEXT Không Chú thích
+5 visibility VARCHAR(20) Có public | friends | private
+6 status VARCHAR(20) Có active | hidden
+7 created_at TIMESTAMPTZ Có Ngày đăng
+ Table post_words
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 post_id UUID Có FK → posts
+3 word_id UUID Không FK → dictionary_words (nếu có)
+4 meaning_snapshot TEXT Có Nghĩa tại thời điểm đăng
+5 example_snapshot TEXT Không Ví dụ tại thời điểm đăng
+6 audio_url_snapshot TEXT Không Audio tại thời điểm đăng
+ Table post_likes
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 post_id UUID Có FK → posts
+3 user_id UUID Có FK → users
+4 created_at TIMESTAMPTZ Có Thời điểm
+ Table post_comments
+STT Field Type Required Mô tả
+1 comment_id UUID Có PK
+2 post_id UUID Có FK → posts
+3 user_id UUID Có FK → users
+4 comment_type VARCHAR(10) Có text | sticker
+5 content TEXT Không Nội dung khi text
+6 badge_id UUID Không Huy hiệu dùng làm sticker khi sticker
+7 status VARCHAR(20) Có active | hidden
+8 created_at TIMESTAMPTZ Có Thời điểm
+ Table post_reports
+STT Field Type Required Mô tả
+1 report_id UUID Có PK
+2 post_id UUID Có FK → posts
+3 reporter_id UUID Có FK → users
+4 reason VARCHAR(30) Có spam/harmful/privacy/nudity/other
+5 details TEXT Không Mô tả thêm
+6 status VARCHAR(20) Có open | resolved | rejected
+7 handled_by UUID Không Admin xử lý (FK → users)
+8 handled_at TIMESTAMPTZ Không Thời điểm xử lý
+9 created_at TIMESTAMPTZ Có Ngày gửi
+ Table groups
+ Table group_members
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 group_id UUID Có FK → groups
+3 user_id UUID Có FK → users
+4 role VARCHAR(20) Có owner | member
+5 status VARCHAR(20) Có active | banned | pending
+6 joined_at TIMESTAMPTZ Có Ngày tham gia
+ Table group_messages
+STT Field Type Required Mô tả
+1 message_id UUID Có PK
+2 group_id UUID Có FK → groups
+3 user_id UUID Có FK → users
+4 message_type VARCHAR(10) Có text | sticker
+STT Field Type Required Mô tả
+1 group_id UUID Có PK
+2 name VARCHAR(100) Có Tên nhóm
+3 require_approval BOOLEAN Có Cần duyệt tham gia?
+4 description TEXT Không Mô tả ngắn
+5 created_by UUID Có Owner (FK → users)
+6 status VARCHAR(20) Có active | archived
+7 created_at TIMESTAMPTZ Có Ngày tạo
+5 content TEXT Không Nội dung khi text
+6 badge_id UUID Không Huy hiệu dùng làm sticker khi sticker
+7 created_at TIMESTAMPTZ Có Thời điểm
+ Table league_tiers
+STT Field Type Required Mô tả
+1 tier_id UUID Có PK
+2 name VARCHAR(60) Có Tên hạng
+3 order_index INTEGER Có Thứ tự tăng dần
+4 xp_cap_rule TEXT Không Giới hạn XP theo dạng bài
+ Table league_cycles
+STT Field Type Required Mô tả
+1 cycle_id UUID Có PK
+2 tier_id UUID Có FK → league_tiers
+3 start_at TIMESTAMPTZ Có Bắt đầu tuần
+4 end_at TIMESTAMPTZ Có Kết thúc tuần
+5 status VARCHAR(20) Có running | closed
+ Table league_members
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 cycle_id UUID Có FK → league_cycles
+3 user_id UUID Có FK → users
+4 weekly_xp INTEGER Có XP trong tuần
+5 rank INTEGER Không Thứ hạng hiện tại
+6 promoted BOOLEAN Không Thăng hạng khi chốt tuần
+7 demoted BOOLEAN Không Rớt hạng khi chốt tuần
+ Table badges
+STT Field Type Required Mô tả
+1 badge_id UUID Có PK
+2 code VARCHAR(40) Có Mã huy hiệu (UNIQUE)
+3 name VARCHAR(80) Có Tên huy hiệu/sticker
+4 icon_url TEXT Không Icon nhỏ
+5 sticker_url TEXT Có File sticker
+6 sticker_animated BOOLEAN Có Sticker động?
+7 description TEXT Không Mô tả
+8 condition_type VARCHAR(30) Có words_learned, streak, weekly_xp,…
+9 threshold INTEGER Có Ngưỡng mở
+10 created_at TIMESTAMPTZ Có Ngày tạo
+ Table user_badges
+STT Field Type Required Mô tả
+1 user_id UUID Có FK → users
+2 badge_id UUID Có FK → badges
+3 awarded_at TIMESTAMPTZ Có Ngày trao
+ Table xp_transactions
+STT Field Type Required Mô tả
+1 tx_id UUID Có PK
+2 user_id UUID Có FK → users
+3 source_type VARCHAR(20) Có learn_round/review/quest/community/…
+4 source_id VARCHAR(64) Không ID tham chiếu (session/post/…)
+5 amount INTEGER Có Số XP (+/-)
+6 note TEXT Không Ghi chú
+7 created_at TIMESTAMPTZ Có Ngày phát sinh
+ Table items
+STT Field Type Required Mô tả
+1 item_id UUID Có PK
+2 code VARCHAR(40) Có Mã vật phẩm (UNIQUE)
+3 name VARCHAR(80) Có Tên vật phẩm
+4 description TEXT Không Mô tả
+5 cost_scales INTEGER Không Giá bằng “Vảy”
+6 cost_gems INTEGER Không Giá bằng “Ngọc băng”
+7 created_at TIMESTAMPTZ Có Ngày tạo
+ Table user_inventory
+STT Field Type Required Mô tả
+1 id UUID Có PK
+2 user_id UUID Có FK → users
+3 item_id UUID Có FK → items
+4 quantity INTEGER Có Số lượng
+5 expires_at TIMESTAMPTZ Không Hết hạn (nếu có)
+6 last_used_at TIMESTAMPTZ Không Dùng gần nhất
+ Table notification_settings
+STT Field Type Required Mô tả
+1 user_id UUID Có PK = FK → users
+2 push_enabled BOOLEAN Có Bật tắt push
+3 morning_time VARCHAR(5) Không Giờ nhắc sáng (HH:mm)
+4 evening_time VARCHAR(5) Không Giờ nhắc tối (HH:mm)
+5 contextual_allowed BOOLEAN Có Cho phép nhắc theo ngữ cảnh
+ Table notifications
+STT Field Type Required Mô tả
+1 notification_id UUID Có PK
+2 user_id UUID Có FK → users
+3 type VARCHAR(30) Có review_due/daily_quest/streak…
+4 payload JSONB Không Dữ liệu kèm theo
+5 sent_at TIMESTAMPTZ Có Đã gửi lúc
+6 read_at TIMESTAMPTZ Không Đã đọc lúc
+ Table admin_actions
+STT Field Type Required Mô tả
+1 action_id UUID Có PK
+2 admin_id UUID Có FK → users (role=admin)
+3 target_type VARCHAR(20) Có post | user | comment
+4 target_id VARCHAR(64) Có ID đối tượng
+5 action VARCHAR(20) Có hide | ban | unban | warn
+6 reason TEXT Không Lý do
+7 created_at TIMESTAMPTZ Có Ngày thực hiện
+2.6. Biểu đồ tuần tự cho một số ca sử dụng quan trọng
+2.6.1. Biểu đồ tuần tự cho ca sử dụng quản lý người dùng và xác thực
+Biểu đồ tuần tự cho ca sử dụng quản lý người dùng và xác thực
+Biểu đồ mô tả các chức năng quản lý người dùng và xác thực:
+- Người dùng đăng ký bằng email/mật khẩu, hệ thống tạo tài khoản ở trạng thái chờ và gửi
+email xác minh. Sau khi xác minh, tài khoản được kích hoạt để sử dụng.
+- Khi đăng nhập, thông tin được kiểm tra trong CSDL. Nếu bật 2FA, hệ thống gửi mã OTP
+để xác thực thêm. Người dùng có thể đăng xuất để kết thúc phiên.
+- Ứng dụng cho phép liên kết hoặc hủy liên kết tài khoản Google/Facebook thông qua
+OAuth, thông tin được lưu trong CSDL.
+- Người dùng cũng có thể cập nhật hồ sơ (tên hiển thị, avatar, giới thiệu), đổi mật khẩu
+hoặc bật 2FA để tăng cường bảo mật.
+2.6.2. Biểu đồ tuần tự cho ca sử dụng nhận diện hình ảnh và xử lý từ vựng
+Biểu đồ tuần tự cho ca sử dụng nhận diện hình ảnh và xử lý từ vựng
+Biểu đồ mô tả chuỗi hoạt động nhận diện và xử lý từ vựng từ ảnh trong ứng dụng:
+- Người dùng bắt đầu bằng cách chụp ảnh từ camera hoặc chọn ảnh trong thư viện. Ứng
+dụng tiếp nhận ảnh và gửi đến mô hình YOLO on-device để nhận diện, kết quả trả về là
+danh sách nhãn (lemma).
+- Sau đó, ứng dụng tiếp nhận hình ảnh và gửi đến mô hình YOLO on-device để tiến hành
+nhận diện. Mô hình sẽ phân tích và trả về danh sách các nhãn (lemma) cùng vị trí trong
+ảnh. Đây chính là tập hợp các từ gốc tiềm năng sẽ được sử dụng để sinh thẻ từ.
+- Với mỗi lemma trong danh sách, ứng dụng lần lượt gọi tới các dịch vụ bổ sung:
+o API Từ điển để lấy nghĩa chi tiết và ví dụ minh họa theo ngữ cảnh.
+o Dịch vụ IPA để sinh ra phiên âm chuẩn quốc tế.
+o Dịch vụ TTS (Text-to-Speech) để tạo audio phát âm tương ứng.
+- Tất cả các thông tin này được kết hợp lại và chuyển đến Trình tạo thẻ từ, từ đó xây dựng
+nên thẻ từ hoàn chỉnh bao gồm: từ gốc, phiên âm IPA, nghĩa, ví dụ và audio phát âm.
+- Thẻ từ sau đó được kiểm tra trùng lặp với dữ liệu trong CSDL cục bộ. Nếu đã tồn tại, hệ
+thống gợi ý hợp nhất; nếu mới, từ sẽ được lưu cùng chủ đề gợi ý.
+- Cuối cùng, ứng dụng hiển thị thẻ từ cho người dùng. Người học có thể lưu để học cá
+nhân, chia sẻ lên cộng đồng, đồng thời dữ liệu cũng được đưa vào đồng bộ nền để nhất
+quán trên các thiết bị.
+2.6.3. Biểu đồ tuần tự cho ca sử dụng học từ mới
+Biểu đồ tuần tự cho ca sử dụng học từ mới
+Biểu đồ mô tả chuỗi hoạt động học từ mới trong ứng dụng:
+- Người dùng bắt đầu phiên học, ứng dụng dùng DeckBuilder tạo bộ 15 từ (đề xuất hoặc tự
+chọn) và hiển thị trong Vòng 1: Preview để người học làm quen.
+- Sang Vòng 2: Flashcard, người dùng vuốt phải/trái để xác định đúng–sai. Kết quả được
+gửi tới SRSEngine để cập nhật trạng thái và mức độ ghi nhớ.
+- Trong Vòng 3: Quiz, người học trả lời các câu hỏi (MCQ, Cloze, Matching, Nghe).
+QuizEngine chấm kết quả, đồng thời SRSEngine lên lịch ôn tập. Nếu có phần nghe, ứng
+dụng gọi AudioEngine để phát âm.
+- Kết thúc, kết quả phiên được lưu vào CSDL cục bộ, và ứng dụng hiển thị tỉ lệ đúng lần
+đầu cùng gợi ý mini-deck tiếp theo.
+2.6.4. Biểu đồ tuần tự cho ca sử dụng ôn tập từ vựng
+Biểu đồ tuần tự cho ca sử dụng ôn tập từ vựng
+Biểu đồ mô tả quy trình ôn tập từ vựng trong ứng dụng:
+- Người dùng chọn chức năng "Ôn tập". Ứng dụng gọi đến SRSEngine để truy vấn các từ
+đến hạn hoặc quá hạn theo các mức 30, 50, 100, 150 từ. Kết quả trả về là một tập từ cần
+ôn. Ứng dụng chuyển tập này cho DeckBuilder để tạo bộ thẻ ôn tập và trả lại cho người
+dùng.
+- Trong bước làm quiz lần đầu, người học trả lời từng câu hỏi. Ứng dụng chuyển câu trả lời
+sang QuizEngine để đánh giá, nhận kết quả đúng hoặc sai, sau đó gửi kết quả này cho
+SRSEngine để tính toán lại và lên lịch cho lần ôn tiếp theo.
+- Nếu người dùng làm sai một số từ, hệ thống tạo thêm một mini deck củng cố lỗi, bao
+gồm các từ sai trong lần đầu, giúp người học luyện nhanh trước khi kết thúc phiên.
+- Khi kết thúc, kết quả phiên ôn tập được lưu vào CSDL cục bộ. Ứng dụng hiển thị phần
+tổng kết và đưa ra gợi ý về đợt ôn tiếp theo.
+2.6.5. Biểu đồ tuần tự cho ca sử dụng sổ từ cá nhân hoá & quản lý từ
+Biểu đồ tuần tự cho ca sử dụng sổ từ cá nhân hoá & quản lý từ
+Biểu đồ mô tả quy trình quản lý Sổ từ trong ứng dụng:
+- Người dùng mở Sổ từ, ứng dụng truy vấn dữ liệu từ CSDL cục bộ để hiển thị danh sách.
+Khi xem chi tiết một từ, nếu thiếu IPA hoặc audio và có mạng, hệ thống sẽ gọi dịch vụ
+IPA và TTS để bổ sung thông tin.
+- Người dùng có thể gán hoặc chỉnh sửa chủ đề cho từ. Nếu chọn học nhanh theo chủ đề,
+ứng dụng lấy danh sách từ cùng chủ đề và khởi chạy với động cơ Flashcard.
+- Ứng dụng hỗ trợ thêm từ thủ công. Khi nhập, hệ thống kiểm tra trùng, nếu có sẽ gợi ý
+gộp, nếu không thì thêm mới. Người dùng cũng có thể sửa hoặc xoá từ, mọi thay đổi
+được đưa vào hàng đợi đồng bộ.
+- Ngoài ra, người học có thể tìm kiếm toàn văn và sử dụng bộ lọc nâng cao. Kết quả tìm
+kiếm được trả về kèm highlight và các tuỳ chọn lọc trực quan.
+2.6.6. Biểu đồ tuần tự cho ca sử dụng mục tiêu và nhắc học
+Biểu đồ tuần tự cho ca sử dụng mục tiêu và nhắc học
+Biểu đồ mô tả quy trình theo dõi tiến độ, nhiệm vụ và nhắc học trong ứng dụng:
+- Khi người dùng mở màn hình chính, ứng dụng truy vấn động cơ SRS và cơ sở dữ liệu để
+hiển thị số từ mới còn lại, số từ đến hạn, streak và heatmap tiến độ.
+- Hệ thống khởi tạo Daily Quests nếu chưa có. Mỗi khi người dùng học, ôn hay tham gia
+cộng đồng, tiến độ được ghi nhận. Khi hoàn thành nhiệm vụ, dữ liệu được cập nhật và
+ứng dụng gửi thông báo chúc mừng.
+- Trong Monthly Challenge, người dùng xem trạng thái thử thách và tích điểm theo hoạt
+động. Khi đạt ngưỡng (20 điểm), hệ thống gửi thông báo kèm huy hiệu tháng.
+- Với nhắc học, người dùng cấu hình thời gian sáng/tối hoặc theo ngày. Bộ lập lịch lưu cài
+đặt và đến giờ sẽ kiểm tra số từ đến hạn. Nếu có, hệ thống gửi thông báo đẩy hoặc nhắc
+tại chỗ trong ứng dụng, dẫn người dùng vào phiên ôn nhanh.
+2.6.7. Biểu đồ tuần tự cho ca sử dụng cộng đồng đăng ảnh nhận diện
+Biểu đồ tuần tự cho ca sử dụng cộng đồng đăng ảnh nhận diện
+Biểu đồ mô tả quy trình đăng và tương tác cộng đồng trong ứng dụng:
+- Người dùng bắt đầu bằng cách tạo bài đăng với ảnh và từ vựng kèm quyền riêng tư. Ứng
+dụng tải ảnh lên bộ nhớ lưu trữ để lấy đường dẫn, sau đó gửi yêu cầu tạo bài đến
+CommunityAPI. Bài viết được ghi nhận trong cơ sở dữ liệu và trả về cho ứng dụng.
+- Khi người dùng mở phần cộng đồng, ứng dụng gọi đến FeedService để lấy danh sách bài
+viết được cá nhân hoá. Các bài này được trả về và hiển thị trên giao diện.
+- Trong quá trình theo dõi, người học có thể tương tác với bài viết bằng các hành động như
+thả tim, bình luận, lưu từ, chia sẻ hoặc báo cáo. Các thao tác này được gửi tới
+CommunityAPI và cập nhật trong PostDB. Nếu có hành động lưu từ, hệ thống đồng thời
+thêm từ đó vào Sổ từ cá nhân trong WordDB.
+- Ngoài ra, khi bài viết đạt đến ngưỡng được coi là hữu ích, PostDB sẽ gọi BadgeService
+để trao huy hiệu “Bài học hữu ích” cho tác giả, nhằm khuyến khích chia sẻ nhiều nội
+dung chất lượng hơn.
+2.6.8. Biểu đồ tuần tự cho ca sử dụng tham gia bảng xếp hạng tuần
+Biểu đồ tuần tự cho ca sử dụng tham gia bảng xếp hạng tuần
+Biểu đồ mô tả quy trình tham gia và theo dõi bảng xếp hạng trong ứng dụng:
+- Người dùng tham gia League, ứng dụng gửi yêu cầu tới LeagueSvc để ghi nhận.
+- Trong suốt tuần, mỗi khi người học tích lũy XP từ các hoạt động, ứng dụng gửi sự kiện
+lên LeagueSvc. Dữ liệu này được kiểm tra bởi AntiCheat nhằm phát hiện gian lận, sau đó
+cộng dồn vào ScoreDB để cập nhật điểm số.
+- Đến cuối chu kỳ, LeagueSvc tổng hợp kết quả từ ScoreDB, tính toán bảng xếp hạng và
+phân loại thăng hoặc hạ hạng. Hệ thống gửi thông báo tóm tắt cho người dùng qua
+NotifSvc. Người dùng cũng có thể truy cập trực tiếp để xem bảng xếp hạng tuần và vị trí
+hiện tại của mình.
+2.6.9. Biểu đồ tuần tự cho ca sử dụng tạo/ tham gia nhóm học
+Biểu đồ tuần tự cho ca sử dụng tạo/ tham gia nhóm học
+Biểu đồ mô tả quy trình tạo và quản lý nhóm học trong ứng dụng:
+- Trưởng nhóm có thể tạo nhóm công khai, riêng tư hoặc yêu cầu duyệt. Thành viên gửi
+yêu cầu tham gia, hệ thống xử lý trực tiếp nếu nhóm công khai, hoặc chờ duyệt từ trưởng
+nhóm nếu nhóm yêu cầu phê duyệt.
+- Trưởng nhóm có thể đặt mục tiêu tuần và lịch học chung. Các thông tin này được lưu lại
+và dịch vụ thông báo gửi nhắc nhở đến tất cả thành viên.
+- Khi mở tab Nhóm, ứng dụng gọi dịch vụ để lấy bảng xếp hạng nhóm và thống kê đóng
+góp của từng thành viên, sau đó hiển thị cho người dùng.
+- Trong quản trị, trưởng nhóm có thể duyệt bài đăng, xử lý báo cáo, mời hoặc loại bỏ thành
+viên, và chuyển quyền điều hành. Các hành động này được cập nhật trong hệ thống và
+gửi thông báo đến các thành viên liên quan.
+2.6.10. Biểu đồ tuần tự cho ca sử dụng Gamification
+Biểu đồ tuần tự cho ca sử dụng Gamification
+Biểu đồ mô tả cơ chế gamification trong ứng dụng:
+- Khi người dùng hoàn thành hoạt động học, ôn hoặc tham gia cộng đồng, ứng dụng gửi sự
+kiện đến Dịch vụ XP để cộng điểm. Hệ thống cập nhật XP trong hồ sơ, tính toán level
+nếu đạt ngưỡng mới, rồi trả về tiến độ để hiển thị cho người dùng.
+- Mỗi ngày, ứng dụng gọi Dịch vụ Streak để ghi nhận lượt học. Nếu người dùng bỏ lỡ, có
+thể sử dụng vật phẩm Streak Freeze trong kho đồ để giữ streak, hệ thống xác nhận và tiếp
+tục bảo vệ chuỗi ngày học.
+- Khi tổng XP, streak hoặc các mốc thành tích đạt ngưỡng, ứng dụng gọi Dịch vụ Huy hiệu
+để đánh giá. Nếu có huy hiệu mới, kết quả được trả về và hiển thị cho người dùng,
+khuyến khích tiếp tục duy trì hoạt động học tập.
+2.6.11. Biểu đồ tuần tự cho ca sử dụng quản trị hệ thống
+Biểu đồ tuần tự cho ca sử dụng quản trị hệ thống
+Biểu đồ mô tả quy trình quản trị hệ thống trong ứng dụng:
+- Quản trị viên mở bảng điều khiển để xem hàng đợi báo cáo. Hệ thống truy vấn CSDL báo
+cáo và trả về danh sách. Quản trị viên có thể chọn duyệt, xoá hoặc ẩn bài viết. Yêu cầu
+được gửi đến dịch vụ kiểm duyệt, từ đó cập nhật vào CSDL nội dung và phản hồi kết quả
+về bảng điều khiển.
+- Trong chống gian lận League, quản trị viên truy cập các cảnh báo XP bất thường. Bảng
+điều khiển gọi dịch vụ League để lấy danh sách vi phạm, sau đó quản trị viên có thể áp
+dụng các hình phạt hoặc reset chu kỳ để đảm bảo công bằng.
+- Với tuân thủ dữ liệu, khi có yêu cầu xoá tài khoản, quản trị viên gửi lệnh tới dịch vụ tuân
+thủ. Hệ thống tiến hành ẩn danh các bài viết, tách thông tin cá nhân, đồng thời đóng các
+báo cáo liên quan trong CSDL báo cáo. Kết quả xử lý được trả về bảng điều khiển để
+quản trị viên theo dõi.
+

@@ -561,7 +561,7 @@ class SurveyView extends GetView<SurveyController> {
                       Text(
                         'Ngày',
                         style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textPrimary.withValues(alpha: 0.7),
+                          color: AppColors.textPrimary.withOpacity(0.7),
                         ),
                       ),
                       SizedBox(height: 8.h),
@@ -605,7 +605,7 @@ class SurveyView extends GetView<SurveyController> {
                       Text(
                         'Tháng',
                         style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textPrimary.withValues(alpha: 0.7),
+                          color: AppColors.textPrimary.withOpacity(0.7),
                         ),
                       ),
                       SizedBox(height: 8.h),
@@ -649,7 +649,7 @@ class SurveyView extends GetView<SurveyController> {
                       Text(
                         'Năm',
                         style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textPrimary.withValues(alpha: 0.7),
+                          color: AppColors.textPrimary.withOpacity(0.7),
                         ),
                       ),
                       SizedBox(height: 8.h),
@@ -700,7 +700,7 @@ class SurveyView extends GetView<SurveyController> {
                     onPressed: () => Get.back(),
                     style: OutlinedButton.styleFrom(
                       backgroundColor: AppColors.buttonDisabled,
-                      side: BorderSide(color: AppColors.textWhite.withValues(alpha: 0.3)),
+                      side: BorderSide(color: AppColors.textWhite.withOpacity(0.3)),
                       padding: EdgeInsets.symmetric(vertical: 16.h),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12.r),
@@ -783,7 +783,7 @@ class SurveyView extends GetView<SurveyController> {
           width: 280.w,
           padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 16.w),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.buttonActive.withValues(alpha: 0.1) : AppColors.backgroundWhite,
+            color: isSelected ? AppColors.buttonActive.withOpacity(0.1) : AppColors.backgroundWhite,
             borderRadius: BorderRadius.circular(50.r),
             border: Border.all(
               color: isSelected ? AppColors.buttonActive : AppColors.progressLocked,

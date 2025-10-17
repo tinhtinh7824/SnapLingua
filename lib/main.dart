@@ -38,4 +38,3 @@ class SnapLinguaApp extends StatelessWidget {
     );
   }
 }
-

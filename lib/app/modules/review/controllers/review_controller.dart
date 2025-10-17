@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../routes/app_pages.dart';
+import '../../vocabulary_topic/controllers/vocabulary_topic_controller.dart';
 
 class VocabularyCategory {
   final String id;
@@ -82,13 +83,12 @@ class ReviewController extends GetxController {
   }
 
   void onCategoryTap(VocabularyCategory category) {
-    // Navigate to vocabulary list
     Get.toNamed(
-      Routes.vocabularyList,
-      arguments: {
-        'categoryId': category.id,
-        'categoryName': category.name,
-      },
+      Routes.vocabularyTopic,
+      arguments: VocabularyTopicArguments(
+        topicName: category.name,
+        items: _mockVocabularyForCategory(category.id),
+      ),
     );
   }
 
@@ -100,5 +100,20 @@ class ReviewController extends GetxController {
       snackPosition: SnackPosition.BOTTOM,
       duration: const Duration(seconds: 2),
     );
+  }
+
+  List<VocabularyTopicItem> _mockVocabularyForCategory(String categoryId) {
+    switch (categoryId) {
+      case '1':
+        return VocabularyTopicController.defaultAnimalVocabulary();
+      case '2':
+        return VocabularyTopicController.defaultAnimalVocabulary();
+      case '3':
+        return VocabularyTopicController.defaultAnimalVocabulary();
+      case '4':
+        return VocabularyTopicController.defaultAnimalVocabulary();
+      default:
+        return VocabularyTopicController.defaultAnimalVocabulary();
+    }
   }
 }

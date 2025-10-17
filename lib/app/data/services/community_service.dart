@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
-import '../models/community_model.dart';
+import 'package:snaplingua/app/data/models/realm/community_model.dart';
+
 import 'realm_service.dart';
 
 class CommunityService extends GetxService {

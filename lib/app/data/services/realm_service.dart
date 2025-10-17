@@ -1,15 +1,16 @@
 import 'package:get/get.dart';
 import 'package:realm/realm.dart' as realm_db;
-import '../models/user_model.dart';
-import '../models/survey_model.dart';
-import '../models/auth_model.dart';
-import '../models/vocabulary_model.dart';
-import '../models/lesson_model.dart';
-import '../models/gamification_model.dart';
-import '../models/community_model.dart';
-import '../models/camera_model.dart';
-import '../models/notification_model.dart';
-import '../models/admin_model.dart';
+import 'package:snaplingua/app/data/models/realm/admin_model.dart';
+import 'package:snaplingua/app/data/models/realm/auth_model.dart';
+import 'package:snaplingua/app/data/models/realm/camera_model.dart';
+import 'package:snaplingua/app/data/models/realm/community_model.dart';
+import 'package:snaplingua/app/data/models/realm/database_schema.dart';
+import 'package:snaplingua/app/data/models/realm/gamification_model.dart';
+import 'package:snaplingua/app/data/models/realm/lesson_model.dart';
+import 'package:snaplingua/app/data/models/realm/notification_model.dart';
+import 'package:snaplingua/app/data/models/realm/survey_model.dart';
+import 'package:snaplingua/app/data/models/realm/user_model.dart';
+import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
 
 class RealmService extends GetxService {
   static RealmService get to => Get.find();
@@ -95,6 +96,42 @@ class RealmService extends GetxService {
         ContentModerationLog.schema,
         SystemLog.schema,
         AppVersion.schema,
+        // Database schema derived from PDF specification
+        DbUser.schema,
+        AuthProviderEntity.schema,
+        UserSecurityEntity.schema,
+        DeviceTokenEntity.schema,
+        BadgeEntity.schema,
+        UserBadgeEntity.schema,
+        PhotoEntity.schema,
+        DetectionEntity.schema,
+        DetectionWordEntity.schema,
+        DictionaryWordEntity.schema,
+        PersonalWordEntity.schema,
+        TopicEntity.schema,
+        PersonalWordTopicEntity.schema,
+        WordMergeEntity.schema,
+        StudySessionEntity.schema,
+        SessionItemEntity.schema,
+        DailyProgressEntity.schema,
+        UserGoalEntity.schema,
+        PostEntity.schema,
+        PostWordEntity.schema,
+        PostLikeEntity.schema,
+        PostCommentEntity.schema,
+        PostReportEntity.schema,
+        GroupEntity.schema,
+        GroupMemberEntity.schema,
+        GroupMessageEntity.schema,
+        LeagueTierEntity.schema,
+        LeagueCycleEntity.schema,
+        LeagueMemberEntity.schema,
+        XpTransactionEntity.schema,
+        ItemEntity.schema,
+        UserInventoryEntity.schema,
+        NotificationSettingEntity.schema,
+        NotificationEntity.schema,
+        AdminActionEntity.schema,
       ]);
 
       // Open the local Realm
@@ -154,53 +191,32 @@ class RealmService extends GetxService {
   // }
 
   // User data methods
-  Future<void> createUser({
+  Future<User> createUser({
     required String email,
-    String? name,
-    String? gender,
-    String? birthDay,
-    String? birthMonth,
-    String? birthYear,
+    String? displayName,
+    String? avatarUrl,
+    String role = 'user',
+    String status = 'active',
   }) async {
     try {
-      final userId = DateTime.now().millisecondsSinceEpoch.toString(); // TODO: Use actual user ID when Atlas is configured
+      final userId = realm_db.Uuid.v4().toString();
 
       final user = User(
         userId,
-        email,
+        role,
+        status,
         DateTime.now(),
-        false, // surveyCompleted
-        1, // level
-        0, // xp
-        0, // streak
-        false, // isVerified
-        false, // isPremium
-        0, // coins
-        0, // totalXp
-        0, // weeklyXp
-        0, // monthlyXp
-        10, // dailyGoal
-        70, // weeklyGoal
-        0, // currentStreak
-        0, // longestStreak
-        0, // totalStudyDays
-        0, // totalStudyTimeMinutes
-        true, // notificationsEnabled
-        true, // soundEnabled
-        false, // darkModeEnabled
-        true, // isActive
-        false, // isBlocked
-        0, // referralCount
-        name: name,
-        gender: gender,
-        birthDay: birthDay,
-        birthMonth: birthMonth,
-        birthYear: birthYear,
+        email: email,
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+        updatedAt: DateTime.now(),
       );
 
       _realm.write(() {
         _realm.add(user);
       });
+
+      return user;
     } catch (e) {
       print('Create user error: $e');
       rethrow;
@@ -213,15 +229,26 @@ class RealmService extends GetxService {
       if (user == null) throw Exception('User not found');
 
       _realm.write(() {
-        if (updates.containsKey('name')) user.name = updates['name'];
-        if (updates.containsKey('gender')) user.gender = updates['gender'];
-        if (updates.containsKey('birthDay')) user.birthDay = updates['birthDay'];
-        if (updates.containsKey('birthMonth')) user.birthMonth = updates['birthMonth'];
-        if (updates.containsKey('birthYear')) user.birthYear = updates['birthYear'];
-        if (updates.containsKey('purpose')) user.purpose = updates['purpose'];
-        if (updates.containsKey('studyTime')) user.studyTime = updates['studyTime'];
-        if (updates.containsKey('surveyCompleted')) user.surveyCompleted = updates['surveyCompleted'];
-        user.updatedAt = DateTime.now();
+        if (updates.containsKey('email')) {
+          user.email = updates['email'] as String?;
+        }
+        if (updates.containsKey('displayName')) {
+          user.displayName = updates['displayName'] as String?;
+        }
+        if (updates.containsKey('avatarUrl')) {
+          user.avatarUrl = updates['avatarUrl'] as String?;
+        }
+        if (updates.containsKey('role')) {
+          user.role = updates['role'] as String;
+        }
+        if (updates.containsKey('status')) {
+          user.status = updates['status'] as String;
+        }
+        if (updates.containsKey('updatedAt')) {
+          user.updatedAt = updates['updatedAt'] as DateTime?;
+        } else {
+          user.updatedAt = DateTime.now();
+        }
       });
     } catch (e) {
       print('Update user error: $e');
@@ -229,10 +256,23 @@ class RealmService extends GetxService {
     }
   }
 
-  User? getCurrentUser() {
-    // TODO: Implement when Atlas authentication is configured
-    // For now, return null since we don't have user sessions
-    return null;
+  User? getUserById(String userId) {
+    try {
+      return _realm.find<User>(userId);
+    } catch (e) {
+      print('Get user by id error: $e');
+      return null;
+    }
+  }
+
+  User? getUserByEmail(String email) {
+    try {
+      final results = _realm.query<User>('email == \$0', [email]);
+      return results.isNotEmpty ? results.first : null;
+    } catch (e) {
+      print('Get user by email error: $e');
+      return null;
+    }
   }
 
   // Survey methods
@@ -267,8 +307,6 @@ class RealmService extends GetxService {
         _realm.add(survey);
       });
 
-      // Update user's survey completion status
-      await updateUser(userId, {'surveyCompleted': true});
     } catch (e) {
       print('Save survey error: $e');
       rethrow;

@@ -1,6 +1,6 @@
 import 'package:realm/realm.dart';
 
-part 'group_realm.g.dart';
+part 'group_realm.realm.dart';
 
 @RealmModel()
 class _Group {

@@ -103,7 +103,7 @@ class ForgotPasswordView extends GetView<ForgotPasswordController> {
                           children: [
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.7),
+                                color: Colors.white.withOpacity(0.7),
                                 borderRadius: BorderRadius.circular(12.r),
                               ),
                               child: TextField(

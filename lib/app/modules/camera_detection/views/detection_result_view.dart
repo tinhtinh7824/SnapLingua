@@ -1,14 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../../../data/services/realm_service.dart';
-import '../../../data/models/vocabulary_model.dart';
+import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_widgets.dart';
+import '../../../data/services/realm_service.dart';
 
 class DetectionResultView extends StatefulWidget {
   const DetectionResultView({super.key});
@@ -294,19 +296,23 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       }
     }
 
-    // Add default topics if none exist
-    if (topics.isEmpty) {
-      topics = {
-        'Động vật',
-        'Thực phẩm',
-        'Đồ vật',
-        'Giao thông',
-        'Thiên nhiên',
-        'Khác',
-      };
-    }
+    // Add default topics
+    topics.addAll({
+      'Động vật',
+      'Thực phẩm',
+      'Đồ vật',
+      'Giao thông',
+      'Thiên nhiên',
+      'Công nghệ',
+      'Giáo dục',
+      'Y tế',
+      'Thể thao',
+      'Du lịch',
+      'Khác',
+    });
 
     final topicList = topics.toList()..sort();
+    final newTopicController = TextEditingController();
 
     showDialog(
       context: context,
@@ -314,23 +320,166 @@ class _DetectionResultViewState extends State<DetectionResultView> {
         title: Text('Chọn chủ đề cho "$word"'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: topicList.length,
-            itemBuilder: (context, index) {
-              final topic = topicList[index];
-              return ListTile(
-                title: Text(topic),
-                onTap: () {
-                  setState(() {
-                    wordData[word]!['topic'] = topic;
-                  });
-                  Get.back();
-                },
-              );
-            },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Create new topic section
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5FFFD),
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(
+                    color: AppColors.buttonActive.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tạo chủ đề mới:',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: newTopicController,
+                            decoration: InputDecoration(
+                              hintText: 'Nhập tên chủ đề...',
+                              hintStyle: TextStyle(
+                                color: AppColors.textHint,
+                                fontSize: 14.sp,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12.w,
+                                vertical: 8.h,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.r),
+                                borderSide: BorderSide(
+                                  color: AppColors.buttonActive.withOpacity(0.3),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.r),
+                                borderSide: BorderSide(
+                                  color: AppColors.buttonActive,
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        ElevatedButton(
+                          onPressed: () {
+                            final newTopic = newTopicController.text.trim();
+                            if (newTopic.isNotEmpty) {
+                              setState(() {
+                                wordData[word]!['topic'] = newTopic;
+                              });
+                              Get.back();
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.buttonActive,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 8.h,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Tạo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'Hoặc chọn chủ đề có sẵn:',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: 8.h),
+              // Existing topics list
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: topicList.length,
+                  itemBuilder: (context, index) {
+                    final topic = topicList[index];
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 4.h),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8.r),
+                        color: Colors.white,
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12.w,
+                          vertical: 2.h,
+                        ),
+                        title: Text(
+                          topic,
+                          style: TextStyle(
+                            fontSize: 15.sp,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          color: AppColors.buttonActive,
+                          size: 20.sp,
+                        ),
+                        onTap: () {
+                          setState(() {
+                            wordData[word]!['topic'] = topic;
+                          });
+                          Get.back();
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text(
+              'Đóng',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14.sp,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -349,47 +498,198 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       }
     }
 
-    // Add default topics if none exist
-    if (topics.isEmpty) {
-      topics = {
-        'Động vật',
-        'Thực phẩm',
-        'Đồ vật',
-        'Giao thông',
-        'Thiên nhiên',
-        'Khác',
-      };
-    }
+    // Add default topics
+    topics.addAll({
+      'Động vật',
+      'Thực phẩm',
+      'Đồ vật',
+      'Giao thông',
+      'Thiên nhiên',
+      'Công nghệ',
+      'Giáo dục',
+      'Y tế',
+      'Thể thao',
+      'Du lịch',
+      'Khác',
+    });
 
     final topicList = topics.toList()..sort();
+    final newTopicController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Chọn chủ đề cho tất cả'),
+        title: const Text('Chọn chủ đề cho tất cả từ'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: topicList.length,
-            itemBuilder: (context, index) {
-              final topic = topicList[index];
-              return ListTile(
-                title: Text(topic),
-                onTap: () {
-                  setState(() {
-                    for (var word in words) {
-                      if (wordData[word] != null) {
-                        wordData[word]!['topic'] = topic;
-                      }
-                    }
-                  });
-                  Get.back();
-                },
-              );
-            },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Create new topic section
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5FFFD),
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(
+                    color: AppColors.buttonActive.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tạo chủ đề mới:',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: newTopicController,
+                            decoration: InputDecoration(
+                              hintText: 'Nhập tên chủ đề...',
+                              hintStyle: TextStyle(
+                                color: AppColors.textHint,
+                                fontSize: 14.sp,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12.w,
+                                vertical: 8.h,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.r),
+                                borderSide: BorderSide(
+                                  color: AppColors.buttonActive.withOpacity(0.3),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.r),
+                                borderSide: BorderSide(
+                                  color: AppColors.buttonActive,
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        ElevatedButton(
+                          onPressed: () {
+                            final newTopic = newTopicController.text.trim();
+                            if (newTopic.isNotEmpty) {
+                              setState(() {
+                                for (var word in words) {
+                                  if (wordData[word] != null) {
+                                    wordData[word]!['topic'] = newTopic;
+                                  }
+                                }
+                              });
+                              Get.back();
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.buttonActive,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 8.h,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Tạo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'Hoặc chọn chủ đề có sẵn:',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: 8.h),
+              // Existing topics list
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: topicList.length,
+                  itemBuilder: (context, index) {
+                    final topic = topicList[index];
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 4.h),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8.r),
+                        color: Colors.white,
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12.w,
+                          vertical: 2.h,
+                        ),
+                        title: Text(
+                          topic,
+                          style: TextStyle(
+                            fontSize: 15.sp,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          color: AppColors.buttonActive,
+                          size: 20.sp,
+                        ),
+                        onTap: () {
+                          setState(() {
+                            for (var word in words) {
+                              if (wordData[word] != null) {
+                                wordData[word]!['topic'] = topic;
+                              }
+                            }
+                          });
+                          Get.back();
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text(
+              'Đóng',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14.sp,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

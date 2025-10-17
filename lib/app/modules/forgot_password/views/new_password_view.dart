@@ -113,7 +113,7 @@ class NewPasswordView extends GetView<ForgotPasswordController> {
                           children: [
                             Obx(() => Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.7),
+                                    color: Colors.white.withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(12.r),
                                   ),
                                   child: TextField(
@@ -173,7 +173,7 @@ class NewPasswordView extends GetView<ForgotPasswordController> {
                           children: [
                             Obx(() => Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.7),
+                                    color: Colors.white.withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(12.r),
                                   ),
                                   child: TextField(
@@ -231,7 +231,7 @@ class NewPasswordView extends GetView<ForgotPasswordController> {
                         Container(
                           padding: EdgeInsets.all(16.w),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.1),
+                            color: Colors.blue.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12.r),
                           ),
                           child: Column(
