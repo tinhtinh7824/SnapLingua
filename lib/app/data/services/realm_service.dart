@@ -145,7 +145,10 @@ class RealmService extends GetxService {
   }
 
   // Authentication methods (simplified for local development)
-  Future<bool> loginWithEmailPassword(String email, String password) async {
+  Future<bool> loginWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
     try {
       // TODO: Implement actual Atlas authentication when App ID is configured
       // For now, simulate successful login for local development
@@ -157,7 +160,10 @@ class RealmService extends GetxService {
     }
   }
 
-  Future<bool> registerWithEmailPassword(String email, String password) async {
+  Future<bool> registerWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
     try {
       // TODO: Implement actual Atlas registration when App ID is configured
       // For now, simulate successful registration for local development
@@ -265,7 +271,7 @@ class RealmService extends GetxService {
     }
   }
 
-  User? getUserByEmail(String email) {
+  User? getUserByEmail({required String email}) {
     try {
       final results = _realm.query<User>('email == \$0', [email]);
       return results.isNotEmpty ? results.first : null;
@@ -314,7 +320,10 @@ class RealmService extends GetxService {
   }
 
   // Password reset methods
-  Future<void> createPasswordReset(String email, String resetCode) async {
+  Future<void> createPasswordReset({
+    required String email,
+    required String resetCode,
+  }) async {
     try {
       final resetId = DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -336,7 +345,10 @@ class RealmService extends GetxService {
     }
   }
 
-  PasswordReset? getValidPasswordReset(String email, String resetCode) {
+  PasswordReset? getValidPasswordReset({
+    required String email,
+    required String resetCode,
+  }) {
     final results = _realm.query<PasswordReset>(
       'email == \$0 AND resetCode == \$1 AND isUsed == false AND expiresAt > \$2',
       [email, resetCode, DateTime.now()],
@@ -344,7 +356,7 @@ class RealmService extends GetxService {
     return results.isNotEmpty ? results.first : null;
   }
 
-  Future<void> markPasswordResetAsUsed(String resetId) async {
+  Future<void> markPasswordResetAsUsed({required String resetId}) async {
     try {
       final reset = _realm.find<PasswordReset>(resetId);
       if (reset == null) throw Exception('Password reset not found');

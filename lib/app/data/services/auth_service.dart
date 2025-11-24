@@ -1,8 +1,10 @@
-import 'package:get/get.dart';
-import 'package:get_storage/get_storage.dart';
-import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:crypto/crypto.dart';
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+
 import 'realm_service.dart';
 
 class AuthService extends GetxService {
@@ -56,7 +58,10 @@ class AuthService extends GetxService {
       }
 
       // Register with Realm
-      final success = await _realmService.registerWithEmailPassword(email, password);
+      final success = await _realmService.registerWithEmailPassword(
+        email: email,
+        password: password,
+      );
 
       if (success) {
         // Create user profile
@@ -93,10 +98,13 @@ class AuthService extends GetxService {
       }
 
       // Login with Realm
-      final success = await _realmService.loginWithEmailPassword(email, password);
+      final success = await _realmService.loginWithEmailPassword(
+        email: email,
+        password: password,
+      );
 
       if (success) {
-        var user = _realmService.getUserByEmail(email);
+        var user = _realmService.getUserByEmail(email: email);
 
         if (user == null) {
           user = await _realmService.createUser(email: email);
@@ -133,7 +141,10 @@ class AuthService extends GetxService {
       final resetCode = _generateResetCode();
 
       // Save reset code to database
-      await _realmService.createPasswordReset(email, resetCode);
+      await _realmService.createPasswordReset(
+        email: email,
+        resetCode: resetCode,
+      );
 
       // In a real app, you would send the code via email
       // For demo purposes, we'll just return the code
@@ -155,7 +166,10 @@ class AuthService extends GetxService {
     required String resetCode,
   }) async {
     try {
-      final passwordReset = _realmService.getValidPasswordReset(email, resetCode);
+      final passwordReset = _realmService.getValidPasswordReset(
+        email: email,
+        resetCode: resetCode,
+      );
 
       if (passwordReset != null) {
         return {'success': true, 'message': 'Mã xác thực đúng'};
@@ -178,11 +192,14 @@ class AuthService extends GetxService {
         return {'success': false, 'message': 'Mật khẩu phải có ít nhất 6 ký tự'};
       }
 
-      final passwordReset = _realmService.getValidPasswordReset(email, resetCode);
+      final passwordReset = _realmService.getValidPasswordReset(
+        email: email,
+        resetCode: resetCode,
+      );
 
       if (passwordReset != null) {
         // Mark reset code as used
-        await _realmService.markPasswordResetAsUsed(passwordReset.id);
+        await _realmService.markPasswordResetAsUsed(resetId: passwordReset.id);
 
         // In a real implementation, you would update the password in Atlas
         // For now, we'll just return success
@@ -193,6 +210,38 @@ class AuthService extends GetxService {
     } catch (e) {
       print('Reset password error: $e');
       return {'success': false, 'message': 'Có lỗi xảy ra khi đặt lại mật khẩu'};
+    }
+  }
+
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+        return {'success': false, 'message': 'Vui lòng nhập đầy đủ thông tin'};
+      }
+      if (newPassword.length < 6) {
+        return {
+          'success': false,
+          'message': 'Mật khẩu mới phải có ít nhất 6 ký tự',
+        };
+      }
+      if (newPassword != confirmPassword) {
+        return {
+          'success': false,
+          'message': 'Xác nhận mật khẩu không khớp',
+        };
+      }
+
+      // TODO: Integrate with actual auth backend. For now, we accept the change locally.
+      return {'success': true, 'message': 'Đổi mật khẩu thành công'};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Không thể đổi mật khẩu: ${e.toString()}',
+      };
     }
   }
 

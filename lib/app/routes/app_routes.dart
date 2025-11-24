@@ -15,10 +15,20 @@ abstract class Routes {
   static const shop = _Paths.shop;
   static const streak = _Paths.streak;
   static const notification = _Paths.notification;
+  static const profile = _Paths.profile;
+  static const profileSettings = _Paths.profileSettings;
+  static const profileEdit = _Paths.profileEdit;
+  static const profileGoal = _Paths.profileGoal;
+  static const profileChangePassword = _Paths.profileChangePassword;
+  static const profileNotification = _Paths.profileNotification;
   static const review = _Paths.review;
   static const community = _Paths.community;
+  static const communityDetail = _Paths.communityDetail;
+  static const communityMemberProfile = _Paths.communityMemberProfile;
   static const vocabularyList = _Paths.vocabularyList;
   static const vocabularyTopic = _Paths.vocabularyTopic;
+  static const addVocabularyCategory = _Paths.addVocabularyCategory;
+  static const learningSession = _Paths.learningSession;
   static const cameraDetection = _Paths.cameraDetection;
   static const detectionResult = _Paths.detectionResult;
 }
@@ -38,10 +48,20 @@ abstract class _Paths {
   static const shop = '/shop';
   static const streak = '/streak';
   static const notification = '/notification';
+  static const profile = '/profile';
+  static const profileSettings = '/profile/settings';
+  static const profileEdit = '/profile/edit';
+  static const profileGoal = '/profile/goal';
+  static const profileChangePassword = '/profile/change-password';
+  static const profileNotification = '/profile/notification';
   static const review = '/review';
   static const community = '/community';
+  static const communityDetail = '/community/detail';
+  static const communityMemberProfile = '/community/member-profile';
   static const vocabularyList = '/vocabulary-list';
   static const vocabularyTopic = '/vocabulary-topic';
+  static const addVocabularyCategory = '/add-vocabulary-category';
+  static const learningSession = '/learning-session';
   static const cameraDetection = '/camera-detection';
   static const detectionResult = '/detection-result';
 }

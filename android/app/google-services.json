@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "567458286537",
+    "project_id": "snaplingua-cfceb",
+    "storage_bucket": "snaplingua-cfceb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:567458286537:android:b9bbc23f5b4532cd597618",
+        "android_client_info": {
+          "package_name": "com.snaplingua.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "567458286537-ni1m7stlq49i8j7nv7eu9b348hm7f0ou.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.snaplingua.app",
+            "certificate_hash": "a67634b98f630644e7b8e5869f2f9d28b68b41a1"
+          }
+        },
+        {
+          "client_id": "567458286537-v29a1c18iq2f9jhsrnssraimsr4muulj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAB0h6-Y-8RaRQiKjzorjFsffiGY__Dt-g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "567458286537-v29a1c18iq2f9jhsrnssraimsr4muulj.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "567458286537-bdog3p68irjnpgdqkv4ugk1ethps5rv7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.snaplingua.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

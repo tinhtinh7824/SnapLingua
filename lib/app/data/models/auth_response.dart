@@ -13,7 +13,7 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     return AuthResponse(
-      success: json['success'] as bool? ?? false,
+      success: _parseSuccess(json['success']),
       message: json['message'] as String? ?? 'Unknown error',
       user: json['user'] != null
           ? UserDto.fromJson(json['user'] as Map<String, dynamic>)
@@ -27,5 +27,16 @@ class AuthResponse {
       'message': message,
       'user': user?.toJson(),
     };
+  }
+
+  static bool _parseSuccess(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final lower = value.toLowerCase();
+      if (lower == 'true' || lower == 'ok' || lower == 'success') return true;
+      if (lower == 'false' || lower == 'error') return false;
+    }
+    return false;
   }
 }

@@ -9,6 +9,14 @@ class VocabularyService extends GetxService {
 
   final RealmService _realmService = RealmService.to;
 
+  // Status constants to keep status strings consistent across the app
+  static const String statusNotStarted = 'not_started';
+  static const String statusLearning = 'learning';
+  static const String statusReviewing = 'reviewing';
+  static const String statusLearned = 'learned';
+  static const String statusMastered = 'mastered';
+  static const String statusNew = 'new';
+
   // Get all vocabulary words
   Future<List<Vocabulary>> getAllVocabulary() async {
     try {
@@ -100,7 +108,7 @@ class VocabularyService extends GetxService {
         0, // incorrectCount
         false, // isMastered
         false, // isFavorite
-        'learning', // status
+        statusLearning, // status
         DateTime.now(),
         nextReviewDate: DateTime.now().add(Duration(days: 1)),
         lastReviewedAt: null,
@@ -180,7 +188,7 @@ class VocabularyService extends GetxService {
       // Check if mastered (level 8 in SRS)
       if (userVocab.repetitions >= 8 && userVocab.easeFactor >= 2.5) {
         userVocab.isMastered = true;
-        userVocab.status = 'mastered';
+        userVocab.status = statusMastered;
       }
     } else {
       userVocab.incorrectCount++;
@@ -226,6 +234,58 @@ class VocabularyService extends GetxService {
     } catch (e) {
       print('Error searching vocabulary: $e');
       return [];
+    }
+  }
+
+  // Hydrate user library (load default vocabulary for new users)
+  Future<bool> hydrateUserLibrary({required String userId}) async {
+    try {
+      final realm = _realmService.realm;
+      if (realm == null) throw Exception('Realm not initialized');
+
+      // Check if user already has vocabulary
+      final existingCount = realm.all<UserVocabulary>()
+          .where((uv) => uv.userId == userId).length;
+
+      if (existingCount > 0) {
+        print('User library already hydrated');
+        return false;
+      }
+
+      // Add some default vocabulary for the user
+      final defaultVocab = realm.all<Vocabulary>()
+          .where((v) => v.isActive)
+          .take(20); // Start with 20 basic words
+
+      realm.write(() {
+        for (final vocab in defaultVocab) {
+          final userVocab = UserVocabulary(
+            DateTime.now().millisecondsSinceEpoch.toString() + '_' + vocab.id,
+            userId,
+            vocab.id,
+            0, // level
+            0, // repetitions
+            2.5, // easeFactor
+            1, // interval
+            0, // correctCount
+            0, // incorrectCount
+            false, // isMastered
+            false, // isFavorite
+            statusNotStarted, // status
+            DateTime.now(),
+            nextReviewDate: DateTime.now().add(Duration(days: 1)),
+            lastReviewedAt: null,
+            updatedAt: null,
+          );
+          realm.add(userVocab);
+        }
+      });
+
+      print('User library hydrated with ${defaultVocab.length} words');
+      return true;
+    } catch (e) {
+      print('Error hydrating user library: $e');
+      return false;
     }
   }
 }

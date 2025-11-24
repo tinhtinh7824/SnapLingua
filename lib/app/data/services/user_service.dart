@@ -1,22 +1,29 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
-import 'realm_service.dart';
+
 import 'auth_service.dart';
+import 'firestore_service.dart';
 
 class UserService extends GetxService {
   static UserService get to => Get.find();
 
-  final RealmService _realmService = Get.find<RealmService>();
   final AuthService _authService = Get.find<AuthService>();
+  final FirestoreService _firestoreService =
+      Get.isRegistered<FirestoreService>()
+          ? FirestoreService.to
+          : Get.put(FirestoreService());
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       if (!_authService.isLoggedIn) return null;
 
-      final user = _realmService.getUserById(_authService.currentUserId);
+      final user =
+          await _firestoreService.getUserById(_authService.currentUserId);
       if (user == null) return null;
 
       return {
-        'id': user.userId,
+        'id': user.id,
         'email': user.email,
         'displayName': user.displayName,
         'avatarUrl': user.avatarUrl,
@@ -52,13 +59,22 @@ class UserService extends GetxService {
         return {'success': true, 'message': 'Không có thay đổi nào được áp dụng'};
       }
 
-      await _realmService.updateUser(userId, updates);
+      await _firestore.collection('users').doc(userId).set(
+            updates,
+            SetOptions(merge: true),
+          );
 
       return {'success': true, 'message': 'Cập nhật thông tin thành công'};
     } catch (e) {
       print('Update profile error: $e');
       return {'success': false, 'message': 'Có lỗi xảy ra khi cập nhật thông tin'};
     }
+  }
+
+  /// Upload avatar to storage. Placeholder: returns the provided local path or empty string on failure.
+  Future<String> uploadAvatar(String filePath) async {
+    // TODO: Integrate with Firebase Storage; for now, just return the existing path.
+    return filePath;
   }
 
   Future<void> updateXP(int xpGained) async {}

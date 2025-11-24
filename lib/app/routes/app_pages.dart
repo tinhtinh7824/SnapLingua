@@ -33,6 +33,22 @@ import '../modules/vocabulary_list/views/vocabulary_list_view.dart';
 import '../modules/camera_detection/bindings/camera_detection_binding.dart';
 import '../modules/camera_detection/views/camera_detection_view.dart';
 import '../modules/camera_detection/views/detection_result_view.dart';
+import '../modules/profile/bindings/profile_binding.dart';
+import '../modules/profile/views/profile_view.dart';
+import '../modules/profile_settings/bindings/profile_settings_binding.dart';
+import '../modules/profile_settings/views/profile_settings_view.dart';
+import '../modules/profile_edit/bindings/profile_edit_binding.dart';
+import '../modules/profile_edit/views/profile_edit_view.dart';
+import '../modules/profile_goal/bindings/profile_goal_binding.dart';
+import '../modules/profile_goal/views/profile_goal_view.dart';
+import '../modules/profile_change_password/bindings/profile_change_password_binding.dart';
+import '../modules/profile_change_password/views/profile_change_password_view.dart';
+import '../modules/profile_notification/bindings/profile_notification_binding.dart';
+import '../modules/profile_notification/views/profile_notification_view.dart';
+import '../modules/community_member_profile/bindings/community_member_profile_binding.dart';
+import '../modules/community_member_profile/views/community_member_profile_view.dart';
+import '../modules/community_detail/bindings/community_detail_binding.dart';
+import '../modules/community_detail/views/community_detail_view.dart';
 
 part 'app_routes.dart';
 
@@ -108,9 +124,49 @@ class AppPages {
       binding: NotificationBinding(),
     ),
     GetPage(
+      name: _Paths.profile,
+      page: () => const ProfileView(),
+      binding: ProfileBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileSettings,
+      page: () => const ProfileSettingsView(),
+      binding: ProfileSettingsBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileEdit,
+      page: () => const ProfileEditView(),
+      binding: ProfileEditBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileGoal,
+      page: () => const ProfileGoalView(),
+      binding: ProfileGoalBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileChangePassword,
+      page: () => const ProfileChangePasswordView(),
+      binding: ProfileChangePasswordBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileNotification,
+      page: () => const ProfileNotificationView(),
+      binding: ProfileNotificationBinding(),
+    ),
+    GetPage(
       name: _Paths.community,
       page: () => const CommunityView(),
       binding: CommunityBinding(),
+    ),
+    GetPage(
+      name: _Paths.communityDetail,
+      page: () => const CommunityDetailView(),
+      binding: CommunityDetailBinding(),
+    ),
+    GetPage(
+      name: _Paths.communityMemberProfile,
+      page: () => const CommunityMemberProfileView(),
+      binding: CommunityMemberProfileBinding(),
     ),
     GetPage(
       name: _Paths.vocabularyTopic,

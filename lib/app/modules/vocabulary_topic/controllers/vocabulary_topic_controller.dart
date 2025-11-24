@@ -227,6 +227,22 @@ class VocabularyTopicController extends GetxController {
     }
   }
 
+  void updateWordStatus(String word, VocabularyLearningStatus newStatus) {
+    final index = items.indexWhere((item) => item.word == word);
+    if (index != -1) {
+      final item = items[index];
+      items[index] = VocabularyTopicItem(
+        word: item.word,
+        ipa: item.ipa,
+        translation: item.translation,
+        exampleEn: item.exampleEn,
+        exampleVi: item.exampleVi,
+        status: newStatus,
+      );
+      items.refresh();
+    }
+  }
+
   int get totalWords => items.length;
 
   static List<VocabularyTopicItem> defaultAnimalVocabulary() => [

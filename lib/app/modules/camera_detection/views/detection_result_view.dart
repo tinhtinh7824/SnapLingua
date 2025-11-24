@@ -6,12 +6,20 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:snaplingua/app/data/models/realm/community_model.dart';
 import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_widgets.dart';
 import '../../../data/services/realm_service.dart';
-
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/vocabulary_service.dart';
+import '../../../data/services/firestore_service.dart';
+import '../../../data/services/daily_progress_service.dart';
+import '../../../routes/app_pages.dart';
+import '../../community/controllers/community_controller.dart';
+import '../../home/controllers/home_controller.dart';
+import '../../review/controllers/review_controller.dart';
 class DetectionResultView extends StatefulWidget {
   const DetectionResultView({super.key});
 
@@ -24,11 +32,15 @@ class _DetectionResultViewState extends State<DetectionResultView> {
   late List<String> words;
   late File? originalImage;
 
-  Map<String, Map<String, String>> wordData = {}; // word -> {phonetic, meaning, example, topic}
+  Map<String, Map<String, String>> wordData =
+      {}; // word -> {phonetic, meaning, example, topic}
   Set<String> selectedWords = {};
   bool isLoading = true;
+  bool _isSavingLocally = false;
+  bool _isSavingAndSharing = false;
 
   final FlutterTts flutterTts = FlutterTts();
+  static const String _guestUserId = 'guest';
 
   @override
   void initState() {
@@ -122,7 +134,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
             if (englishMeaning.isEmpty && data[0]['meanings'].isNotEmpty) {
               englishMeaning =
                   data[0]['meanings'][0]['definitions'][0]['definition'];
-              example = data[0]['meanings'][0]['definitions'][0]['example'] ?? '';
+              example =
+                  data[0]['meanings'][0]['definitions'][0]['example'] ?? '';
             }
 
             // Translate to Vietnamese
@@ -140,6 +153,9 @@ class _DetectionResultViewState extends State<DetectionResultView> {
               wordData[word] = {
                 'phonetic': phonetic,
                 'meaning': vietnameseMeaning.trim(),
+                'definition': englishMeaning.isNotEmpty
+                    ? englishMeaning.trim()
+                    : vietnameseMeaning.trim(),
                 'example': example,
                 'topic': 'chọn chủ đề',
               };
@@ -149,6 +165,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
               wordData[word] = {
                 'phonetic': '',
                 'meaning': 'Không tìm thấy nghĩa',
+                'definition': '',
                 'example': '',
                 'topic': 'chọn chủ đề',
               };
@@ -159,6 +176,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
             wordData[word] = {
               'phonetic': '',
               'meaning': 'Không tìm thấy nghĩa',
+              'definition': '',
               'example': '',
               'topic': 'chọn chủ đề',
             };
@@ -169,6 +187,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
           wordData[word] = {
             'phonetic': '',
             'meaning': 'Lỗi khi lấy dữ liệu',
+            'definition': '',
             'example': '',
             'topic': 'chọn chủ đề',
           };
@@ -183,6 +202,10 @@ class _DetectionResultViewState extends State<DetectionResultView> {
 
   /// Save selected words to Realm
   Future<void> _saveToVocabulary({bool shouldShare = false}) async {
+    if (_isSavingLocally || _isSavingAndSharing) {
+      return;
+    }
+
     if (selectedWords.isEmpty) {
       Get.snackbar(
         'Thông báo',
@@ -194,83 +217,187 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       return;
     }
 
+    final unassignedTopics = selectedWords.where((word) {
+      final topic = wordData[word]?['topic'] ?? 'chọn chủ đề';
+      return topic == 'chọn chủ đề' || topic.trim().isEmpty;
+    }).toList(growable: false);
+
+    if (unassignedTopics.isNotEmpty) {
+      Get.snackbar(
+        'Thông báo',
+        'Vui lòng chọn chủ đề cho: ${unassignedTopics.join(', ')}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.xpGold,
+        colorText: AppColors.textWhite,
+        duration: const Duration(seconds: 3),
+      );
+      return;
+    }
+
     try {
       final realm = RealmService.to.realm;
       if (realm == null) {
         throw Exception('Realm chưa khởi tạo');
       }
 
-      const userId = 'current_user_id'; // TODO: Replace with actual user ID
+      if (mounted) {
+        setState(() {
+          if (shouldShare) {
+            _isSavingAndSharing = true;
+          } else {
+            _isSavingLocally = true;
+          }
+        });
+      }
+
       final now = DateTime.now();
 
       realm.write(() {
-        for (String word in selectedWords) {
+        for (final word in selectedWords) {
           final data = wordData[word];
           if (data == null) continue;
 
-          // Create vocabulary if not exists
-          final vocabId = '${word}_${now.millisecondsSinceEpoch}';
-          final vocab = Vocabulary(
-            vocabId,
-            word,
-            data['meaning'] ?? 'No definition', // definition
-            'beginner', // difficulty
-            data['topic'] == 'chọn chủ đề' ? 'Khác' : data['topic']!, // category
-            0, // frequency
-            true, // isActive
-            now, // createdAt
-            phonetic: data['phonetic'],
-            translation: data['meaning'],
-            example: data['example'],
-            updatedAt: now,
+          final topicName = data['topic']!.trim();
+
+          // Ensure category exists
+          final existingCategoryResults =
+              realm.query<Category>('name == \$0', [topicName]);
+          if (existingCategoryResults.isNotEmpty) {
+            final category = existingCategoryResults.first;
+            if (!category.isActive) {
+              category.isActive = true;
+            }
+          } else {
+            final categoryId = _generateCategoryId(topicName, now);
+            final sortOrder = realm.all<Category>().length;
+            final newCategory = Category(
+              categoryId,
+              topicName,
+              sortOrder,
+              true,
+              now,
+            );
+            realm.add(newCategory);
+          }
+
+          // Find existing vocabulary in this category
+          final existingVocabResults = realm.query<Vocabulary>(
+            'word == \$0 AND category == \$1',
+            [word, topicName],
           );
 
-          realm.add(vocab, update: true);
+          Vocabulary vocab;
+          if (existingVocabResults.isNotEmpty) {
+            vocab = existingVocabResults.first;
+            vocab
+              ..definition = (data['definition']?.isNotEmpty ?? false)
+                  ? data['definition']!
+                  : (data['meaning'] ?? vocab.definition)
+              ..translation = data['meaning'] ?? vocab.translation
+              ..phonetic = data['phonetic'] ?? vocab.phonetic
+              ..example = data['example'] ?? vocab.example
+              ..updatedAt = now
+              ..category = topicName;
+          } else {
+            final vocabId =
+                '${word}_${topicName}_${now.millisecondsSinceEpoch}';
+            vocab = Vocabulary(
+              vocabId,
+              word,
+              (data['definition']?.isNotEmpty ?? false)
+                  ? data['definition']!
+                  : (data['meaning'] ?? 'No definition'),
+              'beginner',
+              topicName,
+              0,
+              true,
+              now,
+              phonetic: data['phonetic'],
+              translation: data['meaning'],
+              example: data['example'],
+              updatedAt: now,
+            );
+            realm.add(vocab);
+          }
 
-          // Create user vocabulary
-          final userVocabId = '${userId}_$vocabId';
-          final userVocab = UserVocabulary(
-            userVocabId,
-            userId,
-            vocabId,
-            1, // level
-            0, // repetitions
-            2.5, // easeFactor
-            0, // interval
-            0, // correctCount
-            0, // incorrectCount
-            false, // isMastered
-            false, // isFavorite
-            'new', // status
-            now, // createdAt
-            updatedAt: now,
+          // Ensure user vocabulary record
+          final userVocabResults = realm.query<UserVocabulary>(
+            'userId == \$0 AND vocabularyId == \$1',
+            [_resolveUserId(), vocab.id],
           );
 
-          realm.add(userVocab, update: true);
+          if (userVocabResults.isNotEmpty) {
+            final existingUserVocab = userVocabResults.first;
+            existingUserVocab.updatedAt = now;
+          } else {
+            final userId = _resolveUserId();
+            final userVocab = UserVocabulary(
+              '${userId}_${vocab.id}',
+              userId,
+              vocab.id,
+              1,
+              0,
+              2.5,
+              0,
+              0,
+              0,
+              false,
+              false,
+              VocabularyService.statusNotStarted,
+              now,
+              nextReviewDate: null,
+              updatedAt: now,
+            );
+            realm.add(userVocab);
+          }
         }
       });
 
-      if (shouldShare) {
-        // TODO: Implement sharing logic
-        Get.snackbar(
-          'Thành công',
-          'Đã lưu ${selectedWords.length} từ vựng và đăng tải',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.buttonSuccess,
-          colorText: AppColors.textWhite,
-        );
-      } else {
-        Get.snackbar(
-          'Thành công',
-          'Đã lưu ${selectedWords.length} từ vựng',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.buttonSuccess,
-          colorText: AppColors.textWhite,
-        );
+      if (Get.isRegistered<ReviewController>()) {
+        await Get.find<ReviewController>().loadCategories();
       }
 
-      // Go back to home
-      Get.back();
+      final communityItems = _buildCommunityVocabularyItems();
+
+      // Cộng XP cơ bản khi lưu vào kho: +1 mỗi từ (dù có chia sẻ hay không)
+      final baseXp = selectedWords.length * 1;
+      await _awardXp(baseXp, 'camera_save', selectedWords.length);
+
+      if (shouldShare) {
+        await _shareToCommunity(communityItems);
+        return;
+      }
+
+      Get.snackbar(
+        'Thành công',
+        'Đã lưu ${selectedWords.length} từ vựng',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.buttonSuccess,
+        colorText: AppColors.textWhite,
+      );
+
+      // Điều hướng sang Ôn tập: ưu tiên quay lại Home rồi chuyển tab,
+      // hạn chế offAll để tránh rebuild nặng gây đơ ứng dụng.
+      if (Get.isRegistered<HomeController>()) {
+        // Pop về Home nếu đã có trong stack; nếu không có thì offAll tới Home
+        var reachedHome = false;
+        Get.until((route) {
+          final isHome = route.settings.name == Routes.home;
+          if (isHome) reachedHome = true;
+          return isHome;
+        });
+        if (!reachedHome) {
+          await Get.offAllNamed(Routes.home);
+        }
+        // Chuyển tab Ôn tập sau khi frame hiện tại kết thúc
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (Get.isRegistered<HomeController>()) {
+            HomeController.to.changeTab(1);
+          }
+        });
+      } else {
+        await Get.offAllNamed(Routes.review);
+      }
     } catch (e) {
       Get.snackbar(
         'Lỗi',
@@ -279,7 +406,170 @@ class _DetectionResultViewState extends State<DetectionResultView> {
         backgroundColor: AppColors.buttonDanger,
         colorText: AppColors.textWhite,
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (shouldShare) {
+            _isSavingAndSharing = false;
+          } else {
+            _isSavingLocally = false;
+          }
+        });
+      }
     }
+  }
+
+  Future<void> _awardXp(int amount, String action, int wordsCount) async {
+    try {
+      final userId = _resolveUserId();
+      if (Get.isRegistered<DailyProgressService>()) {
+        await DailyProgressService.to.awardXp(
+          userId: userId,
+          amount: amount,
+          activity: DailyActivityType.camera,
+          sourceType: 'camera',
+          action: action,
+          wordsCount: wordsCount,
+          metadata: {
+            'words_saved': wordsCount,
+          },
+        );
+        return;
+      }
+
+      final realm = RealmService.to.realm;
+      if (realm == null) return;
+      final sessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
+      realm.write(() {
+        realm.add(UserSession(
+          sessionId,
+          userId,
+          DateTime.now(),
+          amount,
+          wordsCount,
+          0,
+          0,
+          endTime: DateTime.now(),
+          activityType: action,
+        ));
+      });
+
+      if (userId != 'guest') {
+        await FirestoreService.to.addXpTransaction(
+          userId: userId,
+          sourceType: 'camera',
+          action: action,
+          amount: amount,
+          wordsCount: wordsCount,
+          metadata: {
+            'words_saved': wordsCount,
+          },
+        );
+      }
+    } catch (e) {
+      // Silent fail, do not block UX
+      // print('Failed to award XP: $e');
+    }
+  }
+
+  String _generateCategoryId(String name, DateTime timestamp) {
+    final normalized = name
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]+'), '_')
+        .replaceAll(RegExp('_+'), '_')
+        .trim();
+    if (normalized.isEmpty) {
+      return 'category_${timestamp.millisecondsSinceEpoch}';
+    }
+    return 'category_$normalized';
+  }
+
+  List<CommunityVocabularyItem> _buildCommunityVocabularyItems() {
+    return selectedWords.map((word) {
+      final data = wordData[word] ?? {};
+      final topic = data['topic'];
+      final translation = (data['meaning'] ?? word).toString();
+      return CommunityVocabularyItem(
+        label: word,
+        confidence: 1.0,
+        headword: word,
+        phonetic: data['phonetic'] ?? '',
+        translation: translation,
+        topic: (topic != null && topic != 'chọn chủ đề') ? topic : null,
+      );
+    }).toList(growable: false);
+  }
+
+  Future<void> _shareToCommunity(
+      List<CommunityVocabularyItem> vocabularyItems) async {
+    try {
+      // Thưởng chia sẻ: +5 XP một lần (không theo số từ)
+      await _awardXp(5, 'camera_share', vocabularyItems.length);
+
+      final communityController = _ensureCommunityController();
+      await communityController.addUserPost(
+        imageUrl: detectedImageUrl,
+        vocabularyItems: vocabularyItems,
+        caption: 'Khám phá từ vựng mới',
+      );
+
+      if (Get.isRegistered<HomeController>()) {
+        HomeController.to.changeTab(2);
+      }
+
+      var reachedHome = false;
+      Get.until((route) {
+        final isHome = route.settings.name == Routes.home;
+        if (isHome) {
+          reachedHome = true;
+        }
+        return isHome;
+      });
+
+      if (!reachedHome) {
+        await Get.offAllNamed(Routes.home);
+      }
+
+      Future.microtask(() {
+        if (Get.isRegistered<HomeController>()) {
+          HomeController.to.changeTab(2);
+        }
+      });
+
+      Get.snackbar(
+        'Thành công',
+        'Đã lưu ${vocabularyItems.length} từ vựng và chia sẻ lên cộng đồng!',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.buttonSuccess,
+        colorText: AppColors.textWhite,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Lỗi',
+        'Không thể đăng bài: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.buttonDanger,
+        colorText: AppColors.textWhite,
+      );
+    }
+  }
+
+  String _resolveUserId() {
+    if (Get.isRegistered<AuthService>()) {
+      final auth = AuthService.to;
+      if (auth.isLoggedIn && auth.currentUserId.isNotEmpty) {
+        return auth.currentUserId;
+      }
+    }
+    return _guestUserId;
+  }
+
+  CommunityController _ensureCommunityController() {
+    if (Get.isRegistered<CommunityController>()) {
+      return Get.find<CommunityController>();
+    }
+    Get.put(CommunityController());
+    return Get.find<CommunityController>();
   }
 
   void _showTopicDialog(String word) {
@@ -292,6 +582,13 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       for (var vocab in vocabs) {
         if (vocab.category.isNotEmpty && vocab.category != 'Camera Detection') {
           topics.add(vocab.category);
+        }
+      }
+
+      final storedCategories = realm.all<Category>();
+      for (final category in storedCategories) {
+        if (category.isActive) {
+          topics.add(category.name);
         }
       }
     }
@@ -330,7 +627,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                   color: const Color(0xFFE5FFFD),
                   borderRadius: BorderRadius.circular(12.r),
                   border: Border.all(
-                    color: AppColors.buttonActive.withOpacity(0.3),
+                    color: AppColors.buttonActive.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
@@ -363,12 +660,13 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8.r),
                                 borderSide: BorderSide(
-                                  color: AppColors.buttonActive.withOpacity(0.3),
+                                  color: AppColors.buttonActive
+                                      .withValues(alpha: 0.3),
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8.r),
-                                borderSide: BorderSide(
+                                borderSide: const BorderSide(
                                   color: AppColors.buttonActive,
                                   width: 2,
                                 ),
@@ -386,6 +684,26 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                               setState(() {
                                 wordData[word]!['topic'] = newTopic;
                               });
+                              if (realm != null) {
+                                final existingCategory = realm
+                                    .query<Category>('name == \$0', [newTopic]);
+                                if (existingCategory.isEmpty) {
+                                  final now = DateTime.now();
+                                  final sortOrder =
+                                      realm.all<Category>().length;
+                                  realm.write(() {
+                                    realm.add(
+                                      Category(
+                                        _generateCategoryId(newTopic, now),
+                                        newTopic,
+                                        sortOrder,
+                                        true,
+                                        now,
+                                      ),
+                                    );
+                                  });
+                                }
+                              }
                               Get.back();
                             }
                           },
@@ -496,6 +814,13 @@ class _DetectionResultViewState extends State<DetectionResultView> {
           topics.add(vocab.category);
         }
       }
+
+      final storedCategories = realm.all<Category>();
+      for (final category in storedCategories) {
+        if (category.isActive) {
+          topics.add(category.name);
+        }
+      }
     }
 
     // Add default topics
@@ -532,7 +857,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                   color: const Color(0xFFE5FFFD),
                   borderRadius: BorderRadius.circular(12.r),
                   border: Border.all(
-                    color: AppColors.buttonActive.withOpacity(0.3),
+                    color: AppColors.buttonActive.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
@@ -565,12 +890,13 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8.r),
                                 borderSide: BorderSide(
-                                  color: AppColors.buttonActive.withOpacity(0.3),
+                                  color: AppColors.buttonActive
+                                      .withValues(alpha: 0.3),
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8.r),
-                                borderSide: BorderSide(
+                                borderSide: const BorderSide(
                                   color: AppColors.buttonActive,
                                   width: 2,
                                 ),
@@ -592,6 +918,26 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                   }
                                 }
                               });
+                              if (realm != null) {
+                                final existingCategory = realm
+                                    .query<Category>('name == \$0', [newTopic]);
+                                if (existingCategory.isEmpty) {
+                                  final now = DateTime.now();
+                                  final sortOrder =
+                                      realm.all<Category>().length;
+                                  realm.write(() {
+                                    realm.add(
+                                      Category(
+                                        _generateCategoryId(newTopic, now),
+                                        newTopic,
+                                        sortOrder,
+                                        true,
+                                        now,
+                                      ),
+                                    );
+                                  });
+                                }
+                              }
                               Get.back();
                             }
                           },
@@ -757,7 +1103,9 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                 height: 300.w,
                                 color: AppColors.surfaceLight,
                                 child: Center(
-                                  child: Icon(Icons.error, color: AppColors.textSecondary, size: 50.sp),
+                                  child: Icon(Icons.error,
+                                      color: AppColors.textSecondary,
+                                      size: 50.sp),
                                 ),
                               );
                             },
@@ -782,7 +1130,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                           onPressed: _selectAllTopics,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.buttonActive,
-                            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 16.w, vertical: 8.h),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20.r),
                             ),
@@ -805,7 +1154,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                     if (isLoading)
                       Padding(
                         padding: EdgeInsets.all(32.h),
-                        child: Center(
+                        child: const Center(
                           child: CircularProgressIndicator(
                             color: AppColors.buttonActive,
                           ),
@@ -825,17 +1174,20 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                             margin: EdgeInsets.only(bottom: 12.h),
                             padding: EdgeInsets.all(16.w),
                             decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFF98ECF8) : null,
-                              gradient: isSelected ? null : const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                stops: [0.0, 0.25, 1.0],
-                                colors: [
-                                  Color(0xFFE0E0E0),
-                                  Color(0xFFE5FFFD),
-                                  Color(0xFFE5FFFD),
-                                ],
-                              ),
+                              color:
+                                  isSelected ? const Color(0xFF98ECF8) : null,
+                              gradient: isSelected
+                                  ? null
+                                  : const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      stops: [0.0, 0.25, 1.0],
+                                      colors: [
+                                        Color(0xFFE0E0E0),
+                                        Color(0xFFE5FFFD),
+                                        Color(0xFFE5FFFD),
+                                      ],
+                                    ),
                               borderRadius: BorderRadius.circular(20.r),
                               border: Border.all(
                                 color: AppColors.buttonActive,
@@ -862,24 +1214,24 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                       shape: BoxShape.circle,
                                       border: Border.all(
                                         color: isSelected
-                                          ? AppColors.buttonActive
-                                          : AppColors.textHint,
+                                            ? AppColors.buttonActive
+                                            : AppColors.textHint,
                                         width: 2,
                                       ),
                                       color: AppColors.backgroundWhite,
                                     ),
                                     child: isSelected
-                                      ? Center(
-                                          child: Container(
-                                            width: 12.w,
-                                            height: 12.w,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: AppColors.buttonActive,
+                                        ? Center(
+                                            child: Container(
+                                              width: 12.w,
+                                              height: 12.w,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: AppColors.buttonActive,
+                                              ),
                                             ),
-                                          ),
-                                        )
-                                      : null,
+                                          )
+                                        : null,
                                   ),
                                 ),
                                 SizedBox(width: 12.w),
@@ -887,7 +1239,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                 // Word info
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         word,
@@ -901,12 +1254,14 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                         SizedBox(height: 4.h),
                                         Row(
                                           children: [
-                                            if (data['phonetic']!.isNotEmpty) ...[
+                                            if (data['phonetic']!
+                                                .isNotEmpty) ...[
                                               Text(
                                                 data['phonetic']!,
                                                 style: TextStyle(
                                                   fontSize: 13.sp,
-                                                  color: AppColors.textSecondary,
+                                                  color:
+                                                      AppColors.textSecondary,
                                                   fontStyle: FontStyle.italic,
                                                 ),
                                               ),
@@ -914,7 +1269,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                                 ' • ',
                                                 style: TextStyle(
                                                   fontSize: 13.sp,
-                                                  color: AppColors.textSecondary,
+                                                  color:
+                                                      AppColors.textSecondary,
                                                 ),
                                               ),
                                             ],
@@ -949,7 +1305,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                                               ),
                                               decoration: BoxDecoration(
                                                 color: AppColors.buttonActive,
-                                                borderRadius: BorderRadius.circular(12.r),
+                                                borderRadius:
+                                                    BorderRadius.circular(12.r),
                                               ),
                                               child: Text(
                                                 data?['topic'] ?? 'chọn chủ đề',
@@ -1005,6 +1362,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                     child: AppWidgets.primaryButton(
                       text: 'Lưu từ vựng',
                       onPressed: () => _saveToVocabulary(shouldShare: false),
+                      enabled: !_isSavingLocally && !_isSavingAndSharing,
+                      isLoading: _isSavingLocally,
                     ),
                   ),
                   SizedBox(width: 12.w),
@@ -1012,6 +1371,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                     child: AppWidgets.primaryButton(
                       text: 'Lưu và đăng tải',
                       onPressed: () => _saveToVocabulary(shouldShare: true),
+                      enabled: !_isSavingLocally && !_isSavingAndSharing,
+                      isLoading: _isSavingAndSharing,
                     ),
                   ),
                 ],

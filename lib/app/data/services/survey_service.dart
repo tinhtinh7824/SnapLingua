@@ -1,11 +1,14 @@
 import 'package:get/get.dart';
-import 'realm_service.dart';
+import 'firestore_service.dart';
 import 'auth_service.dart';
 
 class SurveyService extends GetxService {
   static SurveyService get to => Get.find();
 
-  final RealmService _realmService = Get.find<RealmService>();
+  final FirestoreService _firestoreService =
+      Get.isRegistered<FirestoreService>()
+          ? FirestoreService.to
+          : Get.put(FirestoreService());
   final AuthService _authService = Get.find<AuthService>();
 
   Future<Map<String, dynamic>> submitSurvey({
@@ -24,20 +27,20 @@ class SurveyService extends GetxService {
 
       final userId = _authService.currentUserId;
 
-      await _realmService.saveSurveyResponse(
+      // Save survey response to Firestore
+      await _firestoreService.createNotification(
         userId: userId,
-        name: name,
-        gender: gender,
-        birthDay: birthDay,
-        birthMonth: birthMonth,
-        birthYear: birthYear,
-        purpose: purpose,
-        studyTime: studyTime,
+        type: 'survey',
+        payload: {
+          'name': name,
+          'gender': gender,
+          'birthDay': birthDay,
+          'birthMonth': birthMonth,
+          'birthYear': birthYear,
+          'purpose': purpose,
+          'studyTime': studyTime,
+        },
       );
-
-      await _realmService.updateUser(userId, {
-        'displayName': name,
-      });
 
       return {'success': true, 'message': 'Khảo sát đã được lưu thành công'};
     } catch (e) {
