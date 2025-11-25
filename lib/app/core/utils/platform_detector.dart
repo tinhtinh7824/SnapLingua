@@ -52,23 +52,21 @@ class PlatformDetector {
     }
 
     if (Platform.isAndroid) {
-      if (kReleaseMode) {
-        // Production: dùng IP thật
-        return '$protocol://$localIp:$port';
-      } else {
-        // Debug/Profile: dùng 10.0.2.2 cho emulator
+      // Emulator luôn dùng 10.0.2.2 để trỏ về host, kể cả build release
+      if (isAndroidEmulator) {
         return '$protocol://10.0.2.2:$port';
       }
+      // Real device: IP của máy trên LAN
+      return '$protocol://$localIp:$port';
     }
 
     if (Platform.isIOS) {
-      if (kReleaseMode) {
-        // Production: dùng IP thật
-        return '$protocol://$localIp:$port';
-      } else {
-        // Debug/Profile: dùng localhost cho simulator
+      // Simulator dùng localhost, kể cả build release
+      if (isIOSSimulator) {
         return '$protocol://localhost:$port';
       }
+      // Real device: IP của máy trên LAN
+      return '$protocol://$localIp:$port';
     }
 
     // Fallback: dùng IP thật

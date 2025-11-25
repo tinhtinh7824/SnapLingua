@@ -101,6 +101,52 @@ class _DetectionResultViewState extends State<DetectionResultView> {
     super.dispose();
   }
 
+  Widget _buildDetectedImage() {
+    final cacheBust = DateTime.now().millisecondsSinceEpoch;
+    final uri = Uri.tryParse(detectedImageUrl);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      return Image.network(
+        '$detectedImageUrl?t=$cacheBust',
+        width: 300.w,
+        height: 300.w,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _imageErrorPlaceholder();
+        },
+      );
+    }
+
+    final file = File(detectedImageUrl);
+    if (file.existsSync()) {
+      return Image.file(
+        file,
+        width: 300.w,
+        height: 300.w,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _imageErrorPlaceholder();
+        },
+      );
+    }
+
+    return _imageErrorPlaceholder();
+  }
+
+  Widget _imageErrorPlaceholder() {
+    return Container(
+      width: 300.w,
+      height: 300.w,
+      color: AppColors.surfaceLight,
+      child: Center(
+        child: Icon(
+          Icons.error,
+          color: AppColors.textSecondary,
+          size: 50.sp,
+        ),
+      ),
+    );
+  }
+
   /// Fetch word meanings from Dictionary API + Google Translate API
   Future<void> _fetchWordMeanings() async {
     const dictionaryApiUrl = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
@@ -1092,24 +1138,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
                         height: 300.w,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16.r),
-                          child: Image.network(
-                            '$detectedImageUrl?t=${DateTime.now().millisecondsSinceEpoch}',
-                            width: 300.w,
-                            height: 300.w,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 300.w,
-                                height: 300.w,
-                                color: AppColors.surfaceLight,
-                                child: Center(
-                                  child: Icon(Icons.error,
-                                      color: AppColors.textSecondary,
-                                      size: 50.sp),
-                                ),
-                              );
-                            },
-                          ),
+                          child: _buildDetectedImage(),
                         ),
                       ),
                     ),

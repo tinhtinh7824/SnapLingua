@@ -18,8 +18,20 @@ class UserService extends GetxService {
     try {
       if (!_authService.isLoggedIn) return null;
 
-      final user =
-          await _firestoreService.getUserById(_authService.currentUserId);
+      final userId = _authService.currentUserId;
+      final email = _authService.currentUserEmail;
+
+      // Try to fetch Firestore user; auto-create minimal doc if missing.
+      var user = await _firestoreService.getUserById(userId);
+      if (user == null) {
+        await _firestoreService.createUser(
+          userId: userId,
+          email: email,
+          displayName: email.split('@').first,
+          avatarUrl: null,
+        );
+        user = await _firestoreService.getUserById(userId);
+      }
       if (user == null) return null;
 
       return {

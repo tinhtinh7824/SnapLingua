@@ -5,8 +5,10 @@ import 'package:get/get.dart';
 import '../../../core/theme/app_widgets.dart';
 import '../../../routes/app_pages.dart';
 import '../../camera_detection/controllers/camera_detection_controller.dart';
+import '../controllers/home_stats_controller.dart';
+import '../../../data/models/firestore_user.dart';
 
-class LearningTabView extends StatelessWidget {
+class LearningTabView extends GetView<HomeStatsController> {
   const LearningTabView({super.key});
 
   // Widget vòng tròn progress dùng chung
@@ -131,81 +133,92 @@ class LearningTabView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFE5FFFD),
-      body: Column(
-        children: [
-          // AppBar với màu BBFFEE
-          Container(
-            color: const Color(0xFFBBFFEE),
-            child: SafeArea(
-              child: _buildHeader(devicePixelRatio),
+      body: Obx(() {
+        final loading = controller.isLoading.value;
+        return Column(
+          children: [
+            // AppBar với màu BBFFEE
+            Container(
+              color: const Color(0xFFBBFFEE),
+              child: SafeArea(
+                child: _buildHeader(devicePixelRatio),
+              ),
             ),
-          ),
 
-          // Scrollable content
-          Expanded(
-            child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Card học với ảnh - flush with app bar
-                    _buildLearningCard(devicePixelRatio),
-
-                    // Content with padding
-                    Padding(
-                      padding: EdgeInsets.all(20.w),
+            // Scrollable content
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Học từ mới
-                          _buildVocabularyCard(devicePixelRatio),
-                          SizedBox(height: 20.h),
+                          // Card học với ảnh - flush with app bar
+                          _buildLearningCard(devicePixelRatio),
 
-                          // Ôn tập ngay
-                          _buildReviewCard(devicePixelRatio),
-                          SizedBox(height: 16.h),
+                          // Content with padding
+                          Padding(
+                            padding: EdgeInsets.all(20.w),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Học từ mới
+                                _buildVocabularyCard(devicePixelRatio),
+                                SizedBox(height: 20.h),
 
-                          // Nhiệm vụ
-                          Center(
-                            child: Text(
-                              'Nhiệm vụ',
-                              style: TextStyle(
-                                fontSize: 18.sp,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.black87,
+                                // Ôn tập ngay
+                                _buildReviewCard(devicePixelRatio),
+                                SizedBox(height: 16.h),
 
-                              ),
+                                // Nhiệm vụ
+                                Center(
+                                  child: Text(
+                                    'Nhiệm vụ',
+                                    style: TextStyle(
+                                      fontSize: 18.sp,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.black87,
+
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: 16.h),
+
+                                // Nhiệm vụ tháng
+                                _buildMonthlyQuest(devicePixelRatio),
+                                SizedBox(height: 16.h),
+
+                                // Nhiệm vụ hàng ngày
+                                _buildDailyQuests(devicePixelRatio),
+                                SizedBox(height: 20.h),
+                              ],
                             ),
                           ),
-                          SizedBox(height: 16.h),
-
-                          // Nhiệm vụ tháng
-                          _buildMonthlyQuest(devicePixelRatio),
-                          SizedBox(height: 16.h),
-
-                          // Nhiệm vụ hàng ngày
-                          _buildDailyQuests(devicePixelRatio),
-                          SizedBox(height: 20.h),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
             ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildHeader(double devicePixelRatio) {
+    final statsUser = controller.user.value;
+    final scales = statsUser?.scalesBalance ?? 0;
+    final gems = statsUser?.gemsBalance ?? 0;
+    // streak placeholder; could be tied to DailyProgress
+    final streak = 0;
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildStatItem('assets/images/vay.png', '160', const Color(0xFFB8C3D1), Routes.shop, devicePixelRatio),
-          _buildStatItem('assets/images/ngoc.png', '2', const Color(0xFF0571E6), Routes.shop, devicePixelRatio),
-          _buildStatItem('assets/images/streak/streak6.png', '15', const Color(0xFF4E67F8), Routes.streak, devicePixelRatio),
+          _buildStatItem('assets/images/vay.png', '$scales', const Color(0xFFB8C3D1), Routes.shop, devicePixelRatio),
+          _buildStatItem('assets/images/ngoc.png', '$gems', const Color(0xFF0571E6), Routes.shop, devicePixelRatio),
+          _buildStatItem('assets/images/streak/streak6.png', '$streak', const Color(0xFF4E67F8), Routes.streak, devicePixelRatio),
           _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification, devicePixelRatio),
         ],
       ),

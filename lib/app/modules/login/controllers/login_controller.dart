@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../routes/app_pages.dart';
-import '../../../data/services/auth_api_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/services/google_sign_in_service.dart';
 import '../../../data/services/local_storage_service.dart';
-import '../../../data/models/login_request.dart';
 import '../../../data/models/google_login_request.dart';
 import '../../../core/theme/app_widgets.dart';
 
 class LoginController extends GetxController {
   static LoginController get to => Get.find();
 
-  final _authApiService = AuthApiService();
+  final AuthService _authService = Get.find<AuthService>();
   final _googleSignInService = GoogleSignInService();
 
   final emailController = TextEditingController();
@@ -30,9 +29,6 @@ class LoginController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-
-    // Debug: In ra backend URL đang được sử dụng
-    AuthApiService.debugPrintUrl();
 
     // Listen to text changes to trigger reactive updates
     emailController.addListener(() {
@@ -101,35 +97,29 @@ class LoginController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // Tạo request để gọi API
-      final request = LoginRequest(
+      final result = await _authService.login(
         email: emailController.text.trim(),
         password: passwordController.text,
       );
 
-      // Gọi API đăng nhập
-      final response = await _authApiService.login(request);
-
       _isLoading.value = false;
 
-      if (response.success) {
-        // Đăng nhập thành công - lưu thông tin user
-        if (response.user != null) {
-          await LocalStorageService.saveUserData(
-            userId: response.user!.userId,
-            email: response.user!.email,
-            displayName: response.user!.displayName,
-            avatarUrl: response.user!.avatarUrl,
-          );
-        }
+      if (result['success'] == true) {
+        // AuthService tự lưu trạng thái, nhưng vẫn sync sang LocalStorageService nếu cần
+        await LocalStorageService.saveUserData(
+          userId: AuthService.to.currentUserId,
+          email: AuthService.to.currentUserEmail,
+          displayName: AuthService.to.currentUserEmail.split('@').first,
+          avatarUrl: null,
+        );
 
-        // Chuyển đến trang chủ
         Get.offAllNamed(Routes.home);
       } else {
-        // Đăng nhập thất bại - Hiển thị lỗi từ server
         AppWidgets.showErrorDialog(
           title: 'Thông báo',
-          message: 'Tài khoản hoặc mật khẩu bạn vừa nhập chưa chính xác. Vui lòng thử lại.',
+          message: (result['message'] as String?)?.trim().isNotEmpty == true
+              ? result['message'] as String
+              : 'Tài khoản hoặc mật khẩu chưa chính xác.',
         );
       }
     } catch (e) {
@@ -143,11 +133,9 @@ class LoginController extends GetxController {
 
   void loginWithGoogle() async {
     _isLoading.value = true;
-
     try {
-      // Bước 1: Đăng nhập với Google
+      // B1: Đăng nhập Google
       final googleAccount = await _googleSignInService.signIn();
-
       if (googleAccount == null) {
         _isLoading.value = false;
         AppWidgets.showInfoDialog(
@@ -157,55 +145,25 @@ class LoginController extends GetxController {
         return;
       }
 
-      // Bước 2: Lấy ID token
-      final idToken = await _googleSignInService.getIdToken(googleAccount);
+      // B2: Lấy email và lưu tạm (demo flow, chưa liên kết Firebase)
+      final email = googleAccount.email;
 
-      if (idToken == null) {
-        _isLoading.value = false;
-        AppWidgets.showErrorDialog(
-          title: 'Lỗi',
-          message: 'Không thể lấy thông tin xác thực từ Google',
-        );
-        return;
-      }
-
-      // Bước 3: Gửi thông tin đến backend
-      final request = GoogleLoginRequest(
-        idToken: idToken,
-        email: googleAccount.email,
-        displayName: googleAccount.displayName,
-        photoUrl: googleAccount.photoUrl,
+      // Lưu trạng thái đăng nhập giả lập
+      await LocalStorageService.saveUserData(
+        userId: email,
+        email: email,
+        displayName: googleAccount.displayName ?? email.split('@').first,
+        avatarUrl: googleAccount.photoUrl,
       );
-
-      final response = await _authApiService.loginWithGoogle(request);
+      await _authService.onInit(); // refresh trạng thái
 
       _isLoading.value = false;
-
-      if (response.success) {
-        // Đăng nhập thành công - lưu thông tin user
-        if (response.user != null) {
-          await LocalStorageService.saveUserData(
-            userId: response.user!.userId,
-            email: response.user!.email,
-            displayName: response.user!.displayName,
-            avatarUrl: response.user!.avatarUrl,
-          );
-        }
-
-        // Chuyển đến trang chủ
-        Get.offAllNamed(Routes.home);
-      } else {
-        // Đăng nhập thất bại
-        AppWidgets.showErrorDialog(
-          title: 'Thông báo',
-          message: response.message,
-        );
-      }
+      Get.offAllNamed(Routes.home);
     } catch (e) {
       _isLoading.value = false;
       AppWidgets.showErrorDialog(
         title: 'Lỗi kết nối',
-        message: 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.',
+        message: 'Không thể kết nối đến Google. Vui lòng thử lại.',
       );
     }
   }

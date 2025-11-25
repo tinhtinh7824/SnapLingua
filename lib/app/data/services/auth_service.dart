@@ -2,20 +2,28 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 
 import 'realm_service.dart';
+import 'firestore_service.dart';
 
 class AuthService extends GetxService {
   static AuthService get to => Get.find();
 
   final _storage = GetStorage();
   final RealmService _realmService = Get.find<RealmService>();
+  final FirestoreService _firestoreService =
+      Get.isRegistered<FirestoreService>()
+          ? FirestoreService.to
+          : Get.put(FirestoreService());
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
 
   final RxBool _isLoggedIn = false.obs;
   final RxString _currentUserId = ''.obs;
   final RxString _currentUserEmail = ''.obs;
+  bool _isPersistingState = false;
 
   bool get isLoggedIn => _isLoggedIn.value;
   String get currentUserId => _currentUserId.value;
@@ -32,10 +40,21 @@ class AuthService extends GetxService {
       final userId = _storage.read('user_id');
       final email = _storage.read('user_email');
 
+      // Prefer persisted state if available
       if (userId != null && email != null) {
         _currentUserId.value = userId;
         _currentUserEmail.value = email;
         _isLoggedIn.value = true;
+        return;
+      }
+
+      // Fallback to Firebase current user
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser != null) {
+        _currentUserId.value = fbUser.uid;
+        _currentUserEmail.value = fbUser.email ?? '';
+        _isLoggedIn.value = true;
+        // Chỉ cập nhật vào memory; tránh ghi file lặp trong onInit
       }
     } catch (e) {
       print('Check auth status error: $e');
@@ -57,29 +76,38 @@ class AuthService extends GetxService {
         return {'success': false, 'message': 'Mật khẩu phải có ít nhất 6 ký tự'};
       }
 
-      // Register with Realm
-      final success = await _realmService.registerWithEmailPassword(
+      // Register with Firebase Auth
+      final cred = await _firebaseAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      if (success) {
-        // Create user profile
-        final user = await _realmService.createUser(
-          email: email,
-          displayName: name,
-        );
-
-        // Save auth state with generated user ID
-        await _saveAuthState(user.userId, email);
-
-        return {'success': true, 'message': 'Đăng ký thành công'};
-      } else {
-        return {'success': false, 'message': 'Đăng ký không thành công'};
+      if (name != null && name.isNotEmpty) {
+        await cred.user?.updateDisplayName(name);
       }
+
+      final userId = cred.user?.uid ?? email;
+
+      // Ensure user profile exists in Firestore (for profile screen)
+      await _ensureFirestoreUser(
+        userId: userId,
+        email: email,
+        displayName: name ?? cred.user?.displayName ?? email.split('@').first,
+        avatarUrl: null,
+      );
+
+      // Create user profile in Realm (local) to keep compatibility
+      await _realmService.createUser(
+        email: email,
+        displayName: name ?? cred.user?.displayName,
+      );
+
+      await _saveAuthState(userId, email);
+
+      return {'success': true, 'message': 'Đăng ký thành công'};
     } catch (e) {
       print('Registration error: $e');
-      return {'success': false, 'message': 'Có lỗi xảy ra: ${e.toString()}'};
+      return {'success': false, 'message': _friendlyFirebaseError(e)};
     }
   }
 
@@ -97,33 +125,43 @@ class AuthService extends GetxService {
         return {'success': false, 'message': 'Mật khẩu không được để trống'};
       }
 
-      // Login with Realm
-      final success = await _realmService.loginWithEmailPassword(
+      // Login with Firebase Auth
+      final cred = await _firebaseAuth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      if (success) {
-        var user = _realmService.getUserByEmail(email: email);
+      final userId = cred.user?.uid ?? email;
 
-        if (user == null) {
-          user = await _realmService.createUser(email: email);
-        }
+      // Ensure user profile exists in Firestore (for profile screen)
+      await _ensureFirestoreUser(
+        userId: userId,
+        email: email,
+        displayName: cred.user?.displayName ?? email.split('@').first,
+        avatarUrl: cred.user?.photoURL,
+      );
 
-        await _saveAuthState(user.userId, email);
-
-        return {'success': true, 'message': 'Đăng nhập thành công'};
-      } else {
-        return {'success': false, 'message': 'Email hoặc mật khẩu không đúng'};
+      // Sync user to Realm/local if missing
+      var user = _realmService.getUserByEmail(email: email);
+      if (user == null) {
+        user = await _realmService.createUser(
+          email: email,
+          displayName: cred.user?.displayName,
+        );
       }
+
+      await _saveAuthState(userId, email);
+
+      return {'success': true, 'message': 'Đăng nhập thành công'};
     } catch (e) {
       print('Login error: $e');
-      return {'success': false, 'message': 'Email hoặc mật khẩu không đúng'};
+      return {'success': false, 'message': _friendlyFirebaseError(e)};
     }
   }
 
   Future<void> logout() async {
     try {
+      await _firebaseAuth.signOut();
       await _realmService.logout();
       await _clearAuthState();
     } catch (e) {
@@ -246,13 +284,19 @@ class AuthService extends GetxService {
   }
 
   Future<void> _saveAuthState(String userId, String email) async {
+    if (_isPersistingState) return; // tránh ghi chồng chéo gây lỗi lock file
+    _isPersistingState = true;
     _currentUserId.value = userId;
     _currentUserEmail.value = email;
     _isLoggedIn.value = true;
 
-    await _storage.write('user_id', userId);
-    await _storage.write('user_email', email);
-    await _storage.write('is_logged_in', true);
+    try {
+      await _storage.write('user_id', userId);
+      await _storage.write('user_email', email);
+      await _storage.write('is_logged_in', true);
+    } finally {
+      _isPersistingState = false;
+    }
   }
 
   Future<void> _clearAuthState() async {
@@ -278,5 +322,44 @@ class AuthService extends GetxService {
     final bytes = utf8.encode(password);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  String _friendlyFirebaseError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('invalid-credential') ||
+        msg.contains('wrong-password')) {
+      return 'Email hoặc mật khẩu không đúng';
+    }
+    if (msg.contains('user-not-found')) {
+      return 'Tài khoản không tồn tại';
+    }
+    if (msg.contains('email-already-in-use')) {
+      return 'Email đã được sử dụng';
+    }
+    if (msg.contains('network-request-failed')) {
+      return 'Không thể kết nối mạng';
+    }
+    return 'Có lỗi xảy ra: $msg';
+  }
+
+  Future<void> _ensureFirestoreUser({
+    required String userId,
+    required String email,
+    required String displayName,
+    String? avatarUrl,
+  }) async {
+    try {
+      final existing = await _firestoreService.getUserById(userId);
+      if (existing != null) return;
+
+      await _firestoreService.createUser(
+        userId: userId,
+        email: email,
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+      );
+    } catch (e) {
+      print('Ensure Firestore user error: $e');
+    }
   }
 }

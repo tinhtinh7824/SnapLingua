@@ -7,6 +7,8 @@ import '../../review/views/review_view.dart';
 import '../../camera_detection/controllers/camera_detection_controller.dart';
 import '../../community/controllers/community_controller.dart';
 import '../../community/views/community_view.dart';
+import '../../profile/controllers/profile_controller.dart';
+import '../../profile/views/profile_view.dart';
 
 class HomeView extends GetView<HomeController> {
   const HomeView({super.key});
@@ -26,7 +28,10 @@ class HomeView extends GetView<HomeController> {
             }
             return const CommunityView();
           case 3:
-            return const Center(child: Text('Hồ sơ'));
+            if (!Get.isRegistered<ProfileController>()) {
+              Get.lazyPut(() => ProfileController());
+            }
+            return const ProfileView();
           default:
             return const LearningTabView();
         }

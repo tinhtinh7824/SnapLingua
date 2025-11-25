@@ -1,14 +1,12 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import '../../../core/utils/platform_detector.dart';
 import '../../../routes/app_pages.dart';
 import '../views/custom_camera_view.dart';
+import '../../../data/services/on_device_detection_service.dart';
 
 class CameraDetectionController extends GetxController {
   static CameraDetectionController get to => Get.find();
@@ -113,70 +111,35 @@ class CameraDetectionController extends GetxController {
     _isLoading.value = true;
 
     try {
-      print('⚡ Bắt đầu gửi ảnh đến YOLO service...');
+      print('⚡ Bắt đầu nhận diện on-device bằng TFLite...');
 
-      // Get backend URL (auto-detect emulator/real device)
-      final baseUrl = PlatformDetector.getBackendUrl(
-        localIp: '192.168.0.102', // TODO: Replace with your machine IP
-        port: 8001,
-        useHttps: false,
-      );
+      final result =
+          await OnDeviceDetectionService.instance.detect(_image.value!);
 
-      final uri = Uri.parse('$baseUrl/predict');
-
-      var request = http.MultipartRequest('POST', uri);
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          _image.value!.path,
-        ),
-      );
-
-      print('⚡ Đang gửi ảnh: ${_image.value!.path}');
-      print('⚡ API URL: $uri');
-
-      var response = await request.send();
-      var responseData = await response.stream.bytesToString();
-
-      print('⚡ Response Data: $responseData');
-
-      var jsonResponse = jsonDecode(responseData);
-
-      // Kiểm tra lỗi
-      if (jsonResponse.containsKey('error')) {
-        _showError('Lỗi từ server: ${jsonResponse['error']}');
+      if (result.detections.isEmpty) {
+        _showError('Không phát hiện được đối tượng nào');
         return;
       }
 
-      if (!jsonResponse.containsKey('processed_image_url') ||
-          !jsonResponse.containsKey('detections')) {
-        _showError('API không trả về đủ dữ liệu');
-        return;
-      }
+      final detectedWords = <String>{
+        for (final d in result.detections) d.label,
+      };
 
-      // Extract detected words
-      Set<String> detectedWords = {};
-      for (var detection in jsonResponse['detections']) {
-        detectedWords.add(detection['class']);
-      }
-
-      String processedImageUrl = jsonResponse['processed_image_url'];
-
-      print('✅ Nhận diện được ${detectedWords.length} từ vựng');
-      print('✅ URL ảnh đã xử lý: $processedImageUrl');
+      print('✅ Nhận diện on-device được ${detectedWords.length} từ');
 
       // Navigate to result page
       Get.toNamed(
         Routes.detectionResult,
         arguments: {
-          'detectedImageUrl': processedImageUrl,
+          // Hiển thị ảnh gốc (hoặc ảnh annotate nếu bạn vẽ bounding boxes sau)
+          'detectedImageUrl': result.annotatedImagePath,
           'words': detectedWords.toList(),
           'originalImage': _image.value,
         },
       );
     } catch (e) {
-      print('❌ Lỗi khi gửi ảnh: $e');
-      _showError('Không thể kết nối đến server: $e');
+      print('❌ Lỗi khi nhận diện on-device: $e');
+      _showError('Không thể nhận diện: $e');
     } finally {
       _isLoading.value = false;
     }

@@ -46,6 +46,35 @@ int _boundIndex(int length, int index) {
   return index;
 }
 
+/// User XP breakdown containing total XP and breakdown by source
+class UserXpBreakdown {
+  UserXpBreakdown({
+    required this.total,
+    required this.bySource,
+    required this.activeDays,
+  });
+
+  final int total;
+  final Map<String, int> bySource;
+  final int activeDays;
+
+  factory UserXpBreakdown.fromMap(Map<String, dynamic> map) {
+    return UserXpBreakdown(
+      total: map['total'] ?? 0,
+      bySource: Map<String, int>.from(map['bySource'] ?? {}),
+      activeDays: map['activeDays'] ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'total': total,
+      'bySource': bySource,
+      'activeDays': activeDays,
+    };
+  }
+}
+
 class CommunityVocabularyItem {
   CommunityVocabularyItem({
     required this.label,
@@ -966,23 +995,24 @@ class CommunityController extends GetxController {
 
   void _mapLeagueMembers(List<FirestoreLeagueMember> members) {
     Future<void>(() async {
+      final tier = selectedLeagueTier.value;
+      final cycle = activeLeagueCycle.value;
+      if (tier == null || cycle == null) {
+        currentLeague.value = CommunityLeagueInfo.empty();
+        return;
+      }
+
+      final _LeagueRuleSet ruleSet = _parseLeagueRule(tier.xpCapRule);
+      List<_LeagueParticipantData> rawParticipants = [];
+
       try {
-        final tier = selectedLeagueTier.value;
-        final cycle = activeLeagueCycle.value;
-        if (tier == null || cycle == null) {
-          currentLeague.value = CommunityLeagueInfo.empty();
-          return;
-        }
-
-        final _LeagueRuleSet ruleSet = _parseLeagueRule(tier.xpCapRule);
-
         // Optimize: Parallelize async operations for better performance
         final List<Future<_LeagueParticipantData?>> participantFutures =
             members.map((member) => _buildParticipantData(member, cycle, ruleSet))
                    .toList();
 
         final rawParticipantsResults = await Future.wait(participantFutures);
-        final List<_LeagueParticipantData> rawParticipants = rawParticipantsResults
+        rawParticipants = rawParticipantsResults
             .where((participant) => participant != null)
             .cast<_LeagueParticipantData>()
             .toList();
@@ -1455,7 +1485,7 @@ class CommunityController extends GetxController {
       return;
     }
     _membershipSubscription =
-        _firestoreService.listenToUserGroups(userId: userId).listen(
+        _firestoreService.listenToUserGroupMemberships(userId: userId).listen(
               (memberships) => _handleMemberships(memberships),
               onError: (error) =>
                   Get.log('Không thể tải thông tin thành viên nhóm: $error'),
@@ -2005,7 +2035,7 @@ class CommunityController extends GetxController {
 
   Future<void> onCreateGroup() async {
     final result = await Get.toNamed(
-      Routes.communityCreateGroup,
+      '/community/create-group', // Use literal route path
     );
     if (result is CommunityStudyGroup) {
       addStudyGroup(result);
@@ -2071,7 +2101,7 @@ class CommunityController extends GetxController {
           return;
         }
         await _firestoreService.updateGroupMemberStatus(
-          memberId: existing.id,
+          membershipId: existing.id,
           status: status,
           requestMessage:
               status == 'pending' ? 'Đang chờ trưởng nhóm phê duyệt.' : null,
@@ -2311,7 +2341,7 @@ class CommunityController extends GetxController {
           return;
         }
         await _firestoreService.updateGroupMemberStatus(
-          memberId: existing.id,
+          membershipId: existing.id,
           status: 'pending',
           requestMessage: trimmedMessage,
         );
@@ -2371,7 +2401,7 @@ class CommunityController extends GetxController {
     final details = joinedGroupDetails.value;
     if (details == null) return;
     Get.toNamed(
-      Routes.communityChat,
+      '/community/chat', // Use literal route path
       arguments: details,
     );
   }
@@ -2400,7 +2430,7 @@ class CommunityController extends GetxController {
     final userId = _resolveUserId();
     final DateTime createdAt = DateTime.now();
     try {
-      final firestorePost = await _firestoreService.createCommunityPost(
+      final postId = await _firestoreService.createCommunityPost(
         userId: userId,
         photoUrl: imageUrl,
         photoId: photoId,
@@ -2420,8 +2450,8 @@ class CommunityController extends GetxController {
             : '$trimmedHeadword - $trimmedTranslation';
 
         await _firestoreService.addPostWord(
-          postId: firestorePost.postId,
-          wordId: null,
+          postId: postId,
+          wordId: '',
           meaningSnapshot: meaningSnapshot,
           exampleSnapshot:
               vocab.phonetic.trim().isEmpty ? null : vocab.phonetic.trim(),
@@ -2429,7 +2459,7 @@ class CommunityController extends GetxController {
       }
 
       await _insertLocalPostPreview(
-        postId: firestorePost.postId,
+        postId: postId,
         imageUrl: imageUrl,
         photoId: photoId,
         vocabularyItems: vocabularyItems,
@@ -2476,6 +2506,7 @@ class CommunityController extends GetxController {
       posts: images.length,
       followers: followers,
       following: following,
+      todayHasActivity: streak > 0, // Assume activity if streak > 0
     );
 
     return CommunityMemberProfileArguments(
@@ -3125,9 +3156,11 @@ class CommunityController extends GetxController {
     try {
       final auth = _authService ??
           (Get.isRegistered<AuthService>() ? AuthService.to : null);
-      if (auth?.isLoggedIn == true &&
-          auth?.currentUserId?.isNotEmpty == true) {
-        return auth!.currentUserId!;
+      if (auth?.isLoggedIn == true) {
+        final userId = auth?.currentUserId;
+        if (userId?.isNotEmpty == true) {
+          return userId!;
+        }
       }
     } catch (e) {
       Get.log('Error resolving user ID: $e');

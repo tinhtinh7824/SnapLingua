@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../controllers/streak_controller.dart';
 import '../../../core/theme/app_widgets.dart';
+import '../../../core/utils/streak_asset_resolver.dart';
 
 class StreakView extends GetView<StreakController> {
   const StreakView({super.key});
@@ -10,19 +11,21 @@ class StreakView extends GetView<StreakController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE5FFFD),
+      backgroundColor: const Color(0xFFEAFBFF),
       appBar: AppBar(
+        backgroundColor: const Color(0xFFEAFBFF),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF1B2B40)),
           onPressed: () => Get.back(),
         ),
         title: Text(
           'Streak',
           style: TextStyle(
-            color: Colors.black,
+            color: const Color(0xFF1B2B40),
             fontSize: 24.sp,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
@@ -31,19 +34,15 @@ class StreakView extends GetView<StreakController> {
           padding: EdgeInsets.all(20.w),
           child: Column(
             children: [
-              // Streak icon and count
               _buildStreakHeader(),
-              SizedBox(height: 12.h),
+              SizedBox(height: 16.h),
 
-              // Month navigation
               _buildMonthNavigation(),
               SizedBox(height: 12.h),
 
-              // Statistics cards
               _buildStatisticsCards(),
               SizedBox(height: 12.h),
 
-              // Calendar
               _buildCalendar(),
             ],
           ),
@@ -53,41 +52,75 @@ class StreakView extends GetView<StreakController> {
   }
 
   Widget _buildStreakHeader() {
-    return Obx(() => Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Streak flame icon
-            Image.asset(
-              'assets/images/streak/streak6.png',
-              width: 148.w,
-              height: 148.h,
-            ),
-            SizedBox(width: 6.w),
-            // Streak count
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${controller.currentStreak.value}',
-                  style: TextStyle(
-                    fontSize: 64.sp,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF4840B2),
-                    height: 1.0,
-                  ),
-                ),
-                Text(
-                  'ngày streak!',
-                  style: TextStyle(
-                    fontSize: 24.sp,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF4840B2),
-                  ),
-                ),
-              ],
+    return Obx(() {
+      final asset = StreakAssetResolver.assetFor(
+        streak: controller.currentStreak.value,
+        hasActivityToday: controller.todayHasActivity.value,
+      );
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(vertical: 24.h, horizontal: 18.w),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFF4E8), Color(0xFFE5F5FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18.r,
+              offset: Offset(0, 12.h),
             ),
           ],
-        ));
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              height: 100.h,
+              padding: EdgeInsets.all(6.w),
+              child: Image.asset(asset),
+            ),
+            SizedBox(width: 18.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Chuỗi hiện tại',
+                    style: TextStyle(
+                      fontSize: 16.sp,
+                      color: const Color(0xFF60718C),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  Text(
+                    '${controller.currentStreak.value}',
+                    style: TextStyle(
+                      fontSize: 56.sp,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF3037B3),
+                      height: 1.0,
+                    ),
+                  ),
+                  Text(
+                    'ngày streak liên tiếp',
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF3037B3),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildMonthNavigation() {
@@ -129,7 +162,10 @@ class StreakView extends GetView<StreakController> {
           children: [
             Expanded(
               child: _buildStatCard(
-                'assets/images/streak/streak6.png',
+                StreakAssetResolver.assetFor(
+                  streak: controller.currentStreak.value,
+                  hasActivityToday: controller.todayHasActivity.value,
+                ),
                 controller.studyDaysInMonth.value.toString(),
                 'ngày học',
                 const Color(0xFF1CB0F6),

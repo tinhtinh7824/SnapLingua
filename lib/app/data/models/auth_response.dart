@@ -12,12 +12,23 @@ class AuthResponse {
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
+    final userJson = json['user'];
+    final resolvedUser =
+        userJson is Map<String, dynamic> ? UserDto.fromJson(userJson) : null;
+
+    // Backend có thể trả về "success", "status", "ok" hoặc chỉ trả user/token.
+    final rawSuccess = json['success'] ?? json['status'] ?? json['ok'];
+    final parsedSuccess = _parseSuccess(rawSuccess);
+    final success = parsedSuccess || resolvedUser != null;
+
+    final message = json['message'] as String? ??
+        json['error'] as String? ??
+        'Unknown error';
+
     return AuthResponse(
-      success: _parseSuccess(json['success']),
-      message: json['message'] as String? ?? 'Unknown error',
-      user: json['user'] != null
-          ? UserDto.fromJson(json['user'] as Map<String, dynamic>)
-          : null,
+      success: success,
+      message: message,
+      user: resolvedUser,
     );
   }
 

@@ -20,17 +20,15 @@
 ///
 /// Author: Claude Code Assistant
 /// Last updated: November 2024
+library;
 
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 
 import '../controllers/community_controller.dart';
-import '../models/community_models.dart';
-import '../widgets/tournament_notice_banner.dart';
 
 /// Main leaderboard view widget displaying community league rankings
 ///
@@ -44,20 +42,20 @@ class CommunityLeaderboardView extends StatelessWidget {
 
   /// Performance optimization constants
   static const double _listCacheExtent = 600.0;
-  static const int _maxAvatarCacheSize = 50;
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
       final league = controller.currentLeague.value;
-      final notice = controller.tournamentNotice.value;
+      // final notice = controller.tournamentNotice.value;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (notice != null) ...[
-            TournamentNoticeBanner(notice: notice),
-            SizedBox(height: 16.h),
-          ],
+          // Tournament notice is temporarily disabled - will be implemented when available in controller
+          // if (notice != null) ...[
+          //   TournamentNoticeBanner(notice: notice),
+          //   SizedBox(height: 16.h),
+          // ],
           _LeagueHeader(league: league),
           SizedBox(height: 18.h),
           Expanded(
@@ -122,6 +120,17 @@ class _LeagueHeader extends StatelessWidget {
     'assets/images/rank/rank10.png',
   ];
 
+  /// Helper method to create remaining label from days remaining
+  String _getRemainingLabel(CommunityLeagueInfo league) {
+    if (league.daysRemaining <= 0) {
+      return 'Đã kết thúc';
+    } else if (league.daysRemaining == 1) {
+      return 'Còn 1 ngày';
+    } else {
+      return 'Còn ${league.daysRemaining} ngày';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Enhanced null safety for rank icon resolution
@@ -175,7 +184,7 @@ class _LeagueHeader extends StatelessWidget {
                 ),
               ),
               Text(
-                league.remainingLabel.isNotEmpty ? league.remainingLabel : 'Không xác định',
+                _getRemainingLabel(league),
                 style: TextStyle(
                   fontSize: 15.sp,
                   fontWeight: FontWeight.w600,
@@ -400,7 +409,7 @@ class _LeagueParticipantTile extends StatelessWidget {
           SizedBox(
             width: 32.w,
             child: Text(
-              '${_validatedRank}',
+              '$_validatedRank',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16.sp,
@@ -439,7 +448,7 @@ class _LeagueParticipantTile extends StatelessWidget {
           Row(
             children: [
               Text(
-                '${_displayedXp}',
+                '$_displayedXp',
                 style: TextStyle(
                   fontSize: 18.sp,
                   fontWeight: FontWeight.w700,
@@ -468,7 +477,7 @@ class _LeagueParticipantTile extends StatelessWidget {
   String get _validatedName {
     final name = participant.name.trim();
     if (name.isEmpty) {
-      return 'Người dùng #${_validatedRank}';
+      return 'Người dùng #$_validatedRank';
     }
     // Limit name length for display
     if (name.length > 20) {

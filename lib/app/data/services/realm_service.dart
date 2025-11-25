@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:get/get.dart';
 import 'package:realm/realm.dart' as realm_db;
 import 'package:snaplingua/app/data/models/realm/admin_model.dart';
@@ -14,6 +15,9 @@ import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
 
 class RealmService extends GetxService {
   static RealmService get to => Get.find();
+
+  // Increment when you change Realm models and need a migration.
+  static const int _schemaVersion = 2;
 
   late realm_db.Realm _realm;
   // realm_db.App? _app; // TODO: Uncomment when Atlas is configured
@@ -43,6 +47,8 @@ class RealmService extends GetxService {
 
   Future<void> _initializeRealm() async {
     try {
+      print('Starting Realm initialization with schema version $_schemaVersion');
+
       // TODO: Initialize the Realm App when Atlas App ID is configured
       // _app = realm_db.App(realm_db.AppConfiguration(appId));
 
@@ -132,15 +138,63 @@ class RealmService extends GetxService {
         NotificationSettingEntity.schema,
         NotificationEntity.schema,
         AdminActionEntity.schema,
-      ]);
+      ], schemaVersion: _schemaVersion, migrationCallback: (migration, oldSchemaVersion) {
+        print('Migrating Realm from version $oldSchemaVersion to $_schemaVersion');
+        // Handle schema changes between versions.
+        if (oldSchemaVersion < 2) {
+          print('Migrating from version $oldSchemaVersion to version 2');
+          // Properties were removed from UserVocabulary; no manual changes needed.
+          // Realm will drop the fields when re-creating the objects.
+        }
+      });
 
-      // Open the local Realm
-      _realm = realm_db.Realm(_config);
-
-      print('Realm initialized successfully');
+      try {
+        // Open the local Realm
+        _realm = realm_db.Realm(_config);
+        print('Realm initialized successfully with version $_schemaVersion');
+      } catch (e) {
+        if (e.toString().contains('schema version') || e.toString().contains('RLM_ERR_INVALID_SCHEMA_VERSION')) {
+          print('Schema version error detected. Attempting to delete and recreate Realm file...');
+          // Delete the existing realm file to resolve version conflicts
+          await _deleteRealmFile();
+          // Try again with fresh database
+          _realm = realm_db.Realm(_config);
+          print('Realm recreated successfully with version $_schemaVersion');
+        } else {
+          rethrow;
+        }
+      }
     } catch (e) {
       print('Error initializing Realm: $e');
       rethrow;
+    }
+  }
+
+  Future<void> _deleteRealmFile() async {
+    try {
+      // Get the default realm file path and delete it
+      final defaultConfig = realm_db.Configuration.local([]);
+      final path = defaultConfig.path;
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        print('Deleted existing Realm file at: $path');
+      }
+
+      // Also delete associated files
+      final lockFile = File('$path.lock');
+      if (await lockFile.exists()) {
+        await lockFile.delete();
+        print('Deleted Realm lock file');
+      }
+
+      final managementFile = File('$path.management');
+      if (await managementFile.exists()) {
+        await managementFile.delete();
+        print('Deleted Realm management file');
+      }
+    } catch (e) {
+      print('Error deleting Realm files: $e');
     }
   }
 
