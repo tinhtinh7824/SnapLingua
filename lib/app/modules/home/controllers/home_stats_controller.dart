@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
 import '../../../data/models/firestore_user.dart';
@@ -24,17 +25,24 @@ class HomeStatsController extends GetxController {
   }
 
   Future<void> load() async {
-    if (!_authService.isLoggedIn) return;
     isLoading.value = true;
     try {
-      final uid = _authService.currentUserId;
+      final fbUser = FirebaseAuth.instance.currentUser;
+      // Ưu tiên lấy userId/email trực tiếp từ Firebase để luôn đúng tài khoản đang đăng nhập
+      final uid = fbUser?.uid ?? _authService.currentUserId;
+      final email = fbUser?.email ?? _authService.currentUserEmail;
+
+      if (uid.isEmpty) return;
+
       var doc = await _firestoreService.getUserById(uid);
       if (doc == null) {
         await _firestoreService.createUser(
           userId: uid,
-          email: _authService.currentUserEmail,
-          displayName: _authService.currentUserEmail.split('@').first,
-          avatarUrl: null,
+          email: email,
+          displayName: (fbUser?.displayName?.isNotEmpty == true)
+              ? fbUser!.displayName!
+              : (email.isNotEmpty ? email.split('@').first : 'Snaplingua user'),
+          avatarUrl: fbUser?.photoURL,
         );
         doc = await _firestoreService.getUserById(uid);
       }

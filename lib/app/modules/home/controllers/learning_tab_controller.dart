@@ -1,14 +1,33 @@
 import 'package:get/get.dart';
+import '../../../data/models/firestore_daily_progress.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/daily_progress_service.dart';
+import '../../../data/models/firestore_daily_quest.dart';
+import '../../../data/models/firestore_monthly_quest.dart';
+import '../../../data/services/quest_service.dart';
 
 class LearningTabController extends GetxController {
   static LearningTabController get to => Get.find<LearningTabController>();
 
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
+  final RxInt newLearned = 0.obs;
+  final RxInt newTarget = 15.obs;
+  final RxInt reviewDone = 0.obs;
+  final RxInt reviewDue = 30.obs;
+  final RxList<FirestoreDailyQuest> dailyQuests = <FirestoreDailyQuest>[].obs;
+  final Rxn<FirestoreMonthlyQuestProgress> monthlyQuest =
+      Rxn<FirestoreMonthlyQuestProgress>();
+
+  int get monthlyTarget => monthlyQuestTarget();
 
   @override
   void onInit() {
     super.onInit();
+    // Ensure QuestService is available before we start refreshing.
+    if (!Get.isRegistered<QuestService>()) {
+      Get.put(QuestService());
+    }
     refreshProgress();
   }
 
@@ -17,15 +36,56 @@ class LearningTabController extends GetxController {
       isLoading.value = true;
       error.value = '';
 
-      // Simulate progress refresh
-      await Future.delayed(const Duration(milliseconds: 300));
+      if (!Get.isRegistered<AuthService>()) {
+        error.value = 'AuthService chưa sẵn sàng';
+        return;
+      }
 
-      // TODO: Implement actual progress refresh logic
-      // This could include:
-      // - Refreshing learning statistics
-      // - Updating progress bars
-      // - Recalculating achievements
-      // - Fetching latest user data
+      final auth = AuthService.to;
+      if (!auth.isLoggedIn || auth.currentUserId.isEmpty) {
+        newLearned.value = 0;
+        reviewDone.value = 0;
+        error.value = 'Bạn cần đăng nhập để xem tiến độ';
+        return;
+      }
+
+      final progressService = DailyProgressService.to;
+      final today = DateTime.now();
+      List<FirestoreDailyProgress> monthly;
+      try {
+        monthly = await progressService.getMonthlyProgress(
+          userId: auth.currentUserId,
+          month: today,
+        );
+      } catch (e) {
+        error.value = 'Không tải được tiến độ: $e';
+        return;
+      }
+
+      final todayProgress = monthly.firstWhere(
+        (p) => p.date.year == today.year && p.date.month == today.month && p.date.day == today.day,
+        orElse: () => FirestoreDailyProgress(
+          progressId: '',
+          userId: auth.currentUserId,
+          date: DateTime(today.year, today.month, today.day),
+          newTarget: 15,
+          newLearned: 0,
+          reviewDue: 30,
+          reviewDone: 0,
+          streak: 0,
+          xpGained: 0,
+        ),
+      );
+
+      newLearned.value = todayProgress.newLearned;
+      newTarget.value = todayProgress.newTarget > 0 ? todayProgress.newTarget : 15;
+      reviewDone.value = todayProgress.reviewDone;
+      reviewDue.value = todayProgress.reviewDue > 0 ? todayProgress.reviewDue : 30;
+
+      // Quests
+      await QuestService.to.refreshQuests();
+      dailyQuests.assignAll(QuestService.to.dailyQuests);
+      monthlyQuest.value = QuestService.to.monthlyProgress.value;
 
     } catch (e) {
       error.value = 'Không thể làm mới tiến độ: $e';

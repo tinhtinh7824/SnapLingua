@@ -10,3 +10,4 @@ class ProfileNotificationBinding extends Bindings {
     );
   }
 }
+

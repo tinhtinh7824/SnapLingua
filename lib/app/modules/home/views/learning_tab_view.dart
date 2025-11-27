@@ -5,8 +5,17 @@ import 'package:get/get.dart';
 import '../../../core/theme/app_widgets.dart';
 import '../../../routes/app_pages.dart';
 import '../../camera_detection/controllers/camera_detection_controller.dart';
+import '../../review/controllers/review_controller.dart';
 import '../controllers/home_stats_controller.dart';
 import '../../../data/models/firestore_user.dart';
+import '../../../data/models/firestore_daily_quest.dart';
+import '../../../data/models/firestore_monthly_quest.dart';
+import '../../learning_session/controllers/learning_session_controller.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/vocabulary_service.dart';
+import '../../../data/models/realm/vocabulary_model.dart';
+import '../controllers/learning_tab_controller.dart';
+import '../../../data/services/quest_service.dart';
 
 class LearningTabView extends GetView<HomeStatsController> {
   const LearningTabView({super.key});
@@ -17,6 +26,8 @@ class LearningTabView extends GetView<HomeStatsController> {
     required int total,
     required Color color,
   }) {
+    final safeTotal = total <= 0 ? 1 : total;
+    final safeCurrent = current.clamp(0, safeTotal).toInt();
     return SizedBox(
       width: 65.w,
       height: 65.h,
@@ -28,7 +39,7 @@ class LearningTabView extends GetView<HomeStatsController> {
               width: 80.w,
               height: 80.h,
               child: CircularProgressIndicator(
-                value: current / total,
+                value: safeCurrent / safeTotal,
                 strokeWidth: 8.w,
                 backgroundColor: Colors.white.withOpacity(0.3),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
@@ -38,7 +49,7 @@ class LearningTabView extends GetView<HomeStatsController> {
           // Text ở giữa
           Center(
             child: Text(
-              '$current/$total',
+              '$safeCurrent/$safeTotal',
               style: TextStyle(
                 fontSize: 18.sp,
                 fontWeight: FontWeight.bold,
@@ -59,7 +70,9 @@ class LearningTabView extends GetView<HomeStatsController> {
     String? imagePath,
     double? devicePixelRatio,
   }) {
-    final percentage = ((current / total) * 100).round();
+    final safeTotal = total <= 0 ? 1 : total;
+    final safeCurrent = current.clamp(0, safeTotal);
+    final percentage = ((safeCurrent / safeTotal) * 100).round();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -77,7 +90,7 @@ class LearningTabView extends GetView<HomeStatsController> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8.r),
                 child: LinearProgressIndicator(
-                  value: current / total,
+                  value: safeCurrent / safeTotal,
                   backgroundColor: Colors.grey[200],
                   valueColor: const AlwaysStoppedAnimation(Color(0xFF1CB0F6)),
                   minHeight: 10.h,
@@ -88,7 +101,7 @@ class LearningTabView extends GetView<HomeStatsController> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '$current/$total',
+                    '$safeCurrent/$safeTotal',
                     style: TextStyle(
                       fontSize: 12.sp,
                       color: Colors.grey,
@@ -130,6 +143,7 @@ class LearningTabView extends GetView<HomeStatsController> {
   @override
   Widget build(BuildContext context) {
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final progressController = Get.put(LearningTabController());
 
     return Scaffold(
       backgroundColor: const Color(0xFFE5FFFD),
@@ -163,11 +177,19 @@ class LearningTabView extends GetView<HomeStatsController> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Học từ mới
-                                _buildVocabularyCard(devicePixelRatio),
+                                Obx(() => _buildVocabularyCard(
+                                      devicePixelRatio,
+                                      progressController.newLearned.value,
+                                      progressController.newTarget.value,
+                                    )),
                                 SizedBox(height: 20.h),
 
                                 // Ôn tập ngay
-                                _buildReviewCard(devicePixelRatio),
+                                Obx(() => _buildReviewCard(
+                                      devicePixelRatio,
+                                      progressController.reviewDone.value,
+                                      progressController.reviewDue.value,
+                                    )),
                                 SizedBox(height: 16.h),
 
                                 // Nhiệm vụ
@@ -185,11 +207,23 @@ class LearningTabView extends GetView<HomeStatsController> {
                                 SizedBox(height: 16.h),
 
                                 // Nhiệm vụ tháng
-                                _buildMonthlyQuest(devicePixelRatio),
+                                Obx(() {
+                                  final monthly = progressController.monthlyQuest.value;
+                                  final current = monthly?.completedCount ?? 0;
+                                  final total = progressController.monthlyTarget;
+                                  return _buildMonthlyQuest(
+                                    devicePixelRatio,
+                                    current: current,
+                                    total: total,
+                                  );
+                                }),
                                 SizedBox(height: 16.h),
 
                                 // Nhiệm vụ hàng ngày
-                                _buildDailyQuests(devicePixelRatio),
+                                Obx(() => _buildDailyQuests(
+                                      devicePixelRatio,
+                                      progressController.dailyQuests,
+                                    )),
                                 SizedBox(height: 20.h),
                               ],
                             ),
@@ -202,6 +236,110 @@ class LearningTabView extends GetView<HomeStatsController> {
         );
       }),
     );
+  }
+
+  Future<void> _handleNewLearningTap() async {
+    try {
+      final auth = Get.find<AuthService>();
+      if (!auth.isLoggedIn) {
+        Get.snackbar(
+          'Cần đăng nhập',
+          'Bạn cần đăng nhập để bắt đầu học từ mới.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      Get.log('LearningTab: Bắt đầu Học từ mới từ trang chủ');
+      final progressCtrl = Get.find<LearningTabController>();
+      final target = progressCtrl.newTarget.value > 0 ? progressCtrl.newTarget.value : 15;
+      final learned = progressCtrl.newLearned.value;
+      final remaining = math.max(0, target - learned);
+      if (remaining <= 0) {
+        Get.snackbar(
+          'Bạn đã đạt mục tiêu',
+          'Hôm nay bạn đã hoàn thành số từ mới theo mục tiêu.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      final takeCount = math.min(10, remaining);
+      final deck = await _buildNewLearningDeck(takeCount);
+      if (deck.isEmpty) {
+        Get.log('LearningTab: Không tìm thấy từ vựng nào để học', isError: true);
+        Get.snackbar(
+          'Không có từ mới',
+          'Kho từ vựng hiện trống hoặc chưa được tải.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      Get.toNamed(
+        Routes.learningSession,
+        arguments: LearningSessionArguments(
+          words: deck,
+          round: LearningSessionController.roundLearning,
+          sessionType: 'new_learning',
+        ),
+      );
+    } catch (e, stack) {
+      Get.log('LearningTab: Lỗi khi bắt đầu học từ mới - $e', isError: true);
+      Get.log(stack.toString(), isError: true);
+      Get.snackbar(
+        'Không thể bắt đầu học',
+        'Đã xảy ra lỗi: $e',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  Future<List<LearningWord>> _buildNewLearningDeck(int takeCount) async {
+    final vocabService = Get.find<VocabularyService>();
+    final all = await vocabService.getAllVocabulary();
+    if (all.isEmpty) return const [];
+
+    all.shuffle();
+    final take = math.min(takeCount, all.length);
+    return all.take(take).map((Vocabulary v) {
+      return LearningWord(
+        vocabularyId: v.id,
+        word: v.word,
+        translation: v.translation ?? v.definition,
+        phonetic: v.phonetic,
+        exampleEn: v.example,
+        exampleVi: '',
+        status: VocabularyService.statusNew,
+        personalWordId: null,
+        srsStage: 0,
+        repetitions: 0,
+        wrongStreak: 0,
+        lapses: 0,
+        srsEase: 250,
+        srsIntervalDays: 0,
+        srsDueAt: null,
+        isLeech: false,
+      );
+    }).toList();
+  }
+
+  Future<void> _handleReviewTap() async {
+    try {
+      final reviewController = Get.isRegistered<ReviewController>()
+          ? Get.find<ReviewController>()
+          : Get.put(ReviewController());
+      Get.log('LearningTab: Bắt đầu luồng Ôn tập ngay từ trang chủ');
+      await reviewController.startReviewSession();
+    } catch (e, stack) {
+      Get.log('LearningTab: Lỗi khi bắt đầu ôn tập ngay - $e', isError: true);
+      Get.log(stack.toString(), isError: true);
+      Get.snackbar(
+        'Không thể ôn tập ngay',
+        'Đã xảy ra lỗi: $e',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
   }
 
   Widget _buildHeader(double devicePixelRatio) {
@@ -374,7 +512,7 @@ class LearningTabView extends GetView<HomeStatsController> {
     );
   }
 
-  Widget _buildVocabularyCard(double devicePixelRatio) {
+  Widget _buildVocabularyCard(double devicePixelRatio, int current, int total) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -401,15 +539,15 @@ class LearningTabView extends GetView<HomeStatsController> {
                 children: [
                   // Vòng tròn progress
                   _buildProgressCircle(
-                    current: 9,
-                    total: 15,
+                    current: current.clamp(0, total),
+                    total: total <= 0 ? 1 : total,
                     color: const Color(0xFF3D8EF7),
                   ),
                   SizedBox(height: 12.h),
                   // Nút học từ mới
                   AppWidgets.actionButton(
                     text: 'Học từ mới',
-                    onPressed: () {},
+                    onPressed: _handleNewLearningTap,
                   ),
                 ],
               ),
@@ -444,7 +582,7 @@ class LearningTabView extends GetView<HomeStatsController> {
     );
   }
 
-  Widget _buildReviewCard(double devicePixelRatio) {
+  Widget _buildReviewCard(double devicePixelRatio, int current, int total) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -493,15 +631,15 @@ class LearningTabView extends GetView<HomeStatsController> {
                 children: [
                   // Vòng tròn progress
                   _buildProgressCircle(
-                    current: 5,
-                    total: 30,
+                    current: current.clamp(0, total),
+                    total: total <= 0 ? 1 : total,
                     color: const Color(0xFF3D8EF7),
                   ),
                   SizedBox(height: 12.h),
                   // Nút ôn tập ngay
                   AppWidgets.actionButton(
                     text: 'Ôn tập ngay',
-                    onPressed: () {},
+                    onPressed: _handleReviewTap,
                   ),
                 ],
               ),
@@ -513,7 +651,11 @@ class LearningTabView extends GetView<HomeStatsController> {
     );
   }
 
-  Widget _buildMonthlyQuest(double devicePixelRatio) {
+  Widget _buildMonthlyQuest(
+    double devicePixelRatio, {
+    required int current,
+    required int total,
+  }) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -535,8 +677,8 @@ class LearningTabView extends GetView<HomeStatsController> {
                 SizedBox(height: 12.h),
                 // Progress bar và số liệu
                 _buildQuestProgressBar(
-                  current: 19,
-                  total: 20,
+                  current: current,
+                  total: total,
                 ),
               ],
             ),
@@ -557,7 +699,21 @@ class LearningTabView extends GetView<HomeStatsController> {
     );
   }
 
-  Widget _buildDailyQuests(double devicePixelRatio) {
+  Widget _buildDailyQuests(
+    double devicePixelRatio,
+    List<FirestoreDailyQuest> quests,
+  ) {
+    if (quests.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(20.w),
+        decoration: AppWidgets.questGradientDecoration(),
+        child: Text(
+          'Chưa có nhiệm vụ hôm nay',
+          style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: AppWidgets.questGradientDecoration(),
@@ -572,29 +728,20 @@ class LearningTabView extends GetView<HomeStatsController> {
             ),
           ),
           SizedBox(height: 16.h),
-          _buildQuestProgressBar(
-            current: 3,
-            total: 5,
-            title: 'Lưu 5 từ mới qua hình ảnh',
-            imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
-            devicePixelRatio: devicePixelRatio,
-          ),
-          SizedBox(height: 16.h),
-          _buildQuestProgressBar(
-            current: 1,
-            total: 30,
-            title: 'Ôn tập 30 từ vựng',
-            imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
-            devicePixelRatio: devicePixelRatio,
-          ),
-          SizedBox(height: 16.h),
-          _buildQuestProgressBar(
-            current: 0,
-            total: 1,
-            title: 'Đăng hình ảnh lên cộng đồng 1 lần',
-            imagePath: 'assets/images/chimcanhcut/chim_camqua.png',
-            devicePixelRatio: devicePixelRatio,
-          ),
+          ...List.generate(quests.length, (index) {
+            final quest = quests[index];
+            final imagePath = 'assets/images/chimcanhcut/chim_camqua.png';
+            return Padding(
+              padding: EdgeInsets.only(bottom: index == quests.length - 1 ? 0 : 16.h),
+              child: _buildQuestProgressBar(
+                current: quest.progress,
+                total: quest.target,
+                title: questTitleForType(quest.type),
+                imagePath: imagePath,
+                devicePixelRatio: devicePixelRatio,
+              ),
+            );
+          }),
         ],
       ),
     );

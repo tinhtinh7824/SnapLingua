@@ -12,15 +12,15 @@ class ProfileNotificationView extends GetView<ProfileNotificationController> {
     return Scaffold(
       backgroundColor: const Color(0xFFE6F9FF),
       appBar: AppBar(
-        elevation: 0,
         backgroundColor: const Color(0xFFE6F9FF),
+        elevation: 0,
         leading: IconButton(
           onPressed: Get.back,
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           color: const Color(0xFF0B1D28),
         ),
         title: Text(
-          'Thông báo',
+          'Thông báo học tập',
           style: TextStyle(
             color: const Color(0xFF0B1D28),
             fontSize: 20.sp,
@@ -29,312 +29,187 @@ class ProfileNotificationView extends GetView<ProfileNotificationController> {
         ),
         centerTitle: false,
       ),
-      body: Obx(() {
-        final loading = controller.isLoading.value;
-        if (loading) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-        return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildToggleCard(context),
-              SizedBox(height: 18.h),
-              _buildTimeCard(context),
-              SizedBox(height: 18.h),
-              _buildContextualCard(),
-              SizedBox(height: 18.h),
-              _buildHelpCard(),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildToggleCard(BuildContext context) {
-    return Obx(() {
-      final enabled = controller.notificationsEnabled.value;
-      return _SettingsCard(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bật thông báo',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0B1D28),
-                    ),
-                  ),
-                  SizedBox(height: 6.h),
-                  Text(
-                    'Nhận nhắc nhở học tập, gợi ý bài học và cập nhật từ Snaplingua.',
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      color: const Color(0xFF4E5D6A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: enabled,
-              onChanged: (value) => controller.toggleNotifications(value),
-              thumbColor: WidgetStateProperty.resolveWith(
-                (states) => const Color(0xFF1CB0F6),
-              ),
-              trackColor: WidgetStateProperty.resolveWith(
-                (states) => states.contains(WidgetState.selected)
-                    ? const Color(0xFFB4DBF4)
-                    : const Color(0xFFDAE7F0),
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  Widget _buildTimeCard(BuildContext context) {
-    return Obx(() {
-      final enabled = controller.notificationsEnabled.value;
-      final morningLabel =
-          controller.formatTimeLabel(context, controller.morningTime.value);
-      final eveningLabel =
-          controller.formatTimeLabel(context, controller.eveningTime.value);
-
-      return _SettingsCard(
-        enabled: enabled,
+      body: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Giờ gửi thông báo',
-              style: TextStyle(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0B1D28),
-              ),
-            ),
-            SizedBox(height: 6.h),
-            Text(
-              'Chọn thời điểm bạn muốn nhận nhắc nhở buổi sáng và buổi tối.',
-              style: TextStyle(
-                fontSize: 13.sp,
-                color: const Color(0xFF4E5D6A),
-              ),
-            ),
-            SizedBox(height: 18.h),
-            Row(
-              children: [
-                Expanded(
-                  child: _TimePickerButton(
-                    label: 'Buổi sáng',
-                    value: morningLabel,
-                    onTap: () => controller.pickMorningTime(context),
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: _TimePickerButton(
-                    label: 'Buổi tối',
-                    value: eveningLabel,
-                    onTap: () => controller.pickEveningTime(context),
-                  ),
-                ),
-              ],
-            ),
+            _buildToggleCard(),
+            SizedBox(height: 20.h),
+            Obx(() => controller.notificationsEnabled.value
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionLabel('Giờ nhắc học'),
+                      SizedBox(height: 12.h),
+                      _buildTimePicker(context),
+                      SizedBox(height: 24.h),
+                      _buildSectionLabel('Tần suất nhắc nhở'),
+                      SizedBox(height: 12.h),
+                      _buildFrequencyPicker(),
+                    ],
+                  )
+                : _buildDisabledInfo()),
+            const Spacer(),
+            _buildFooterInfo(),
           ],
         ),
-      );
-    });
+      ),
+    );
   }
 
-  Widget _buildContextualCard() {
-    return Obx(() {
-      final enabled = controller.notificationsEnabled.value;
-      final contextual = controller.contextualAllowed.value;
-      return _SettingsCard(
-        enabled: enabled,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Cho phép ngữ cảnh',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0B1D28),
-                    ),
-                  ),
-                  SizedBox(height: 6.h),
-                  Text(
-                    'Nhận thông báo dựa trên lịch học, streak hoặc bài học bạn đang theo dõi.',
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      color: const Color(0xFF4E5D6A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: contextual,
-              onChanged: (value) => controller.toggleContextual(value),
-              thumbColor: WidgetStateProperty.resolveWith(
-                (states) => const Color(0xFF1CB0F6),
-              ),
-              trackColor: WidgetStateProperty.resolveWith(
-                (states) => states.contains(WidgetState.selected)
-                    ? const Color(0xFFB4DBF4)
-                    : const Color(0xFFDAE7F0),
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  Widget _buildHelpCard() {
+  Widget _buildToggleCard() {
     return Container(
-      width: double.infinity,
       padding: EdgeInsets.all(18.w),
       decoration: BoxDecoration(
-        color: const Color(0xFFDCF4FF),
-        borderRadius: BorderRadius.circular(18.r),
-        border: Border.all(color: const Color(0xFF9FD7FF)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 12.r,
+            offset: Offset(0, 6.h),
+          ),
+        ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.notifications_active_rounded,
-            color: const Color(0xFF1991EB),
-            size: 24.sp,
-          ),
+          Icon(Icons.notifications_active_rounded,
+              color: const Color(0xFF1CB0F6), size: 28.sp),
           SizedBox(width: 12.w),
           Expanded(
             child: Text(
-              'Hãy đảm bảo bạn đã bật quyền thông báo cho Snaplingua trong phần Cài đặt hệ thống để nhận thông báo đẩy.',
+              'Nhắc học hằng ngày',
               style: TextStyle(
-                fontSize: 13.sp,
                 color: const Color(0xFF0B1D28),
-                height: 1.4,
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+          Obx(() => Switch.adaptive(
+                value: controller.notificationsEnabled.value,
+                activeColor: const Color(0xFF1CB0F6),
+                onChanged: controller.toggleNotifications,
+              )),
         ],
       ),
     );
   }
-}
 
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard({
-    required this.child,
-    this.enabled = true,
-  });
+  Widget _buildSectionLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: const Color(0xFF0B1D28),
+        fontSize: 15.sp,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
 
-  final Widget child;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.45,
-      child: IgnorePointer(
-        ignoring: !enabled,
+  Widget _buildTimePicker(BuildContext context) {
+    return Obx(() {
+      final time = controller.reminderTime.value;
+      final formatted = time.format(context);
+      return GestureDetector(
+        onTap: () async {
+          final picked = await showTimePicker(
+            context: context,
+            initialTime: time,
+          );
+          if (picked != null) {
+            await controller.updateTime(picked);
+          }
+        },
         child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(20.w),
+          padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 14.h),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18.r),
-            border: Border.all(color: const Color(0xFFB4DBF4), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: const Color.fromRGBO(0, 0, 0, 0.04),
-                blurRadius: 12.r,
-                offset: Offset(0, 6.h),
+            border: Border.all(color: const Color(0xFF1CB0F6), width: 2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                formatted,
+                style: TextStyle(
+                  color: const Color(0xFF0B1D28),
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
+              Icon(Icons.chevron_right_rounded,
+                  color: const Color(0xFF1CB0F6), size: 24.sp),
             ],
           ),
-          child: child,
         ),
+      );
+    });
+  }
+
+  Widget _buildFrequencyPicker() {
+    return Obx(() {
+      final selected = controller.frequency.value;
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 6.h),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18.r),
+          border: Border.all(color: const Color(0xFF1CB0F6), width: 2),
+        ),
+        child: Column(
+          children: controller.frequencies.map((item) {
+            final isSelected = item == selected;
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                item,
+                style: TextStyle(
+                  color: const Color(0xFF0B1D28),
+                  fontSize: 15.sp,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              trailing: isSelected
+                  ? Icon(Icons.check_circle_rounded,
+                      color: const Color(0xFF1CB0F6), size: 22.sp)
+                  : null,
+              onTap: () => controller.updateFrequency(item),
+            );
+          }).toList(),
+        ),
+      );
+    });
+  }
+
+  Widget _buildDisabledInfo() {
+    return Container(
+      padding: EdgeInsets.all(18.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: const Color(0xFFB4DBF4), width: 1.5),
+      ),
+      child: Text(
+        'Bạn đã tắt nhắc nhở học. Bật lại để được nhắc học vào thời gian bạn chọn.',
+        style: TextStyle(
+          color: const Color(0xFF60718C),
+          fontSize: 14.sp,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooterInfo() {
+    return Text(
+      'Snaplingua sẽ gửi thông báo qua hệ thống của thiết bị. Hãy đảm bảo bạn đã bật quyền thông báo cho ứng dụng.',
+      style: TextStyle(
+        color: const Color(0xFF60718C),
+        fontSize: 12.sp,
       ),
     );
   }
 }
 
-class _TimePickerButton extends StatelessWidget {
-  const _TimePickerButton({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13.sp,
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF4E5D6A),
-          ),
-        ),
-        SizedBox(height: 8.h),
-        InkWell(
-          borderRadius: BorderRadius.circular(14.r),
-          onTap: onTap,
-          child: Ink(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE9F6FF),
-              borderRadius: BorderRadius.circular(14.r),
-              border: Border.all(color: const Color(0xFFB4DBF4)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF0B1D28),
-                  ),
-                ),
-                Icon(
-                  Icons.access_time_filled_rounded,
-                  color: const Color(0xFF1CB0F6),
-                  size: 20.sp,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

@@ -69,18 +69,6 @@ class ListenAndTypeQuestion extends RoundThreeQuestion {
   ListenAndTypeQuestion({required super.learningWord});
 }
 
-/// Model for a Find the Misspelled Word question.
-class MisspelledWordQuestion extends RoundThreeQuestion {
-  final List<String> options;
-  final String misspelledWord;
-
-  MisspelledWordQuestion({
-    required super.learningWord,
-    required this.options,
-    required this.misspelledWord,
-  });
-}
-
 // --- End of Round 3 Models ---
 
 class LearningSessionView extends GetView<LearningSessionController> {
@@ -392,7 +380,7 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
     final translations = words.map((w) => w.translation).toList();
     final questions = <RoundThreeQuestion>[];
     for (final w in words) {
-      final type = rnd.nextInt(5); // 0: MC, 1: Matching, 2: Scramble, 3: Listen & type, 4: Misspelled
+      final type = rnd.nextInt(4); // 0: MC, 1: Matching, 2: Scramble, 3: Listen & type
       if (type == 0 || words.length < 3) {
         // Multiple choice
         final opts = <String>{w.translation};
@@ -433,98 +421,9 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
       } else if (type == 3) {
         // Listen & type
         questions.add(ListenAndTypeQuestion(learningWord: w));
-      } else {
-        // Misspelled word
-        questions.add(_buildMisspelledQuestion(w, words, rnd));
       }
     }
     return questions;
-  }
-
-  MisspelledWordQuestion _buildMisspelledQuestion(
-    LearningWord target,
-    List<LearningWord> words,
-    math.Random rnd,
-  ) {
-    final options = <String>[];
-    final seen = <String>{};
-    void addWord(String word) {
-      final normalized = word.toLowerCase().trim();
-      if (normalized.isEmpty) return;
-      if (seen.contains(normalized)) return;
-      options.add(word);
-      seen.add(normalized);
-    }
-
-    addWord(target.word);
-    for (final candidate in words.where((w) => w.word != target.word)) {
-      addWord(candidate.word);
-      if (options.length >= 4) break;
-    }
-    if (options.length < 4) {
-      for (final candidate in words) {
-        addWord(candidate.word);
-        if (options.length >= 4) break;
-      }
-    }
-    while (options.length < 4) {
-      options.add(target.word);
-    }
-
-    final baseIndex = rnd.nextInt(options.length);
-    final baseWord = options[baseIndex];
-    final otherOptions = <String>{};
-    for (int i = 0; i < options.length; i++) {
-      if (i == baseIndex) continue;
-      otherOptions.add(options[i].toLowerCase());
-    }
-    String misspelled = _generateMisspelling(baseWord, rnd);
-    int attempts = 0;
-    while (
-            (misspelled.toLowerCase() == baseWord.toLowerCase() ||
-                otherOptions.contains(misspelled.toLowerCase())) &&
-            attempts < 6) {
-      misspelled = _generateMisspelling(baseWord, rnd);
-      attempts++;
-    }
-    options[baseIndex] = misspelled;
-    final displayOptions = [...options]..shuffle(rnd);
-
-    return MisspelledWordQuestion(
-      learningWord: target,
-      options: displayOptions,
-      misspelledWord: misspelled,
-    );
-  }
-
-  String _generateMisspelling(String word, math.Random rnd) {
-    if (word.isEmpty) return word;
-    final targetLower = word.toLowerCase();
-    for (int attempt = 0; attempt < 6; attempt++) {
-      final chars = word.split('');
-      if (chars.length == 1) {
-        chars.add(chars.first);
-      } else {
-        final mode = rnd.nextInt(3);
-        if (mode == 0 && chars.length > 1) {
-          final idx = rnd.nextInt(chars.length);
-          chars.removeAt(idx);
-        } else if (mode == 1) {
-          final idx = rnd.nextInt(chars.length);
-          chars.insert(idx, chars[idx]);
-        } else if (chars.length > 1) {
-          final idx = math.max(0, rnd.nextInt(chars.length - 1));
-          final tmp = chars[idx];
-          chars[idx] = chars[idx + 1];
-          chars[idx + 1] = tmp;
-        }
-      }
-      final candidate = chars.join();
-      if (candidate.isEmpty) continue;
-      if (candidate.toLowerCase() == targetLower) continue;
-      return candidate;
-    }
-    return '$word${word.length > 1 ? word[0] : 'a'}';
   }
 
   void _onQuestionCompleted({
@@ -751,15 +650,6 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
           ),
           onPrimaryActionChanged: _updatePrimaryAction,
           onSpeak: () => widget.controller.speakWord(q.learningWord),
-        );
-      } else if (q is MisspelledWordQuestion) {
-        return _MisspelledWordQuestionWidget(
-          question: q,
-          onCompleted: (correct) => _onQuestionCompleted(
-            question: q,
-            isCorrect: correct,
-            type: 'misspelled',
-          ),
         );
       }
       return const SizedBox.shrink();
@@ -1372,109 +1262,7 @@ class _ListenAndTypeQuestionWidgetState extends State<_ListenAndTypeQuestionWidg
   }
 }
 
-class _MisspelledWordQuestionWidget extends StatefulWidget {
-  final MisspelledWordQuestion question;
-  final void Function(bool correct) onCompleted;
-
-  const _MisspelledWordQuestionWidget({
-    required this.question,
-    required this.onCompleted,
-  });
-
-  @override
-  State<_MisspelledWordQuestionWidget> createState() => _MisspelledWordQuestionWidgetState();
-}
-
-class _MisspelledWordQuestionWidgetState extends State<_MisspelledWordQuestionWidget> {
-  String? _selectedOption;
-  bool _answered = false;
-  bool _isCorrect = false;
-
-  void _handleSelection(String option) {
-    if (_selectedOption != null) return;
-    setState(() {
-      _selectedOption = option;
-      _answered = true;
-      _isCorrect = option == widget.question.misspelledWord;
-    });
-    Future.delayed(const Duration(milliseconds: 70), () {
-      if (!mounted) return;
-      widget.onCompleted(_isCorrect);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hint = widget.question.learningWord.translation;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Tìm từ bị viết sai trong danh sách dưới đây.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w600),
-          ),
-          
-          SizedBox(height: 24.h),
-          Column(
-            children: widget.question.options.asMap().entries.map((entry) {
-              final index = entry.key;
-              final option = entry.value;
-              final letter = String.fromCharCode(65 + index);
-              Color bgColor = const Color(0xFFE0E7EF);
-              Color textColor = const Color(0xFF0B1D28);
-              if (_answered) {
-                if (option == widget.question.misspelledWord) {
-                  bgColor = Colors.green.shade100;
-                  textColor = Colors.green.shade800;
-                } else if (!_isCorrect && option == _selectedOption) {
-                  bgColor = Colors.red.shade100;
-                  textColor = Colors.red.shade800;
-                } else {
-                  bgColor = const Color(0xFF979797);
-                  textColor = const Color(0xFF4A4A4A);
-                }
-              }
-              return Padding(
-                padding: EdgeInsets.symmetric(vertical: 6.h),
-                child: ElevatedButton(
-                  onPressed: _selectedOption == null ? () => _handleSelection(option) : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: bgColor,
-                    foregroundColor: textColor,
-                    elevation: 0,
-                    minimumSize: Size(double.infinity, 52.h),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                    textStyle: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '$letter.',
-                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700),
-                      ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        child: Text(
-                          option,
-                          style: TextStyle(fontSize: 16.sp),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+                 
 
 class _FlashcardContent extends StatelessWidget {
   const _FlashcardContent({required this.controller});

@@ -12,6 +12,10 @@ import 'community_service.dart';
 import 'camera_service.dart';
 import 'firestore_service.dart';
 import 'daily_progress_service.dart';
+import 'goal_service.dart';
+import 'notification_settings_service.dart';
+import 'push_notification_service.dart';
+import 'yolo_tflite_detector_service.dart';
 import '../../../firebase_options.dart';
 
 class ServiceBinding extends Bindings {
@@ -52,6 +56,18 @@ class ServiceBinding extends Bindings {
     }
     if (!Get.isRegistered<DailyProgressService>()) {
       Get.put<DailyProgressService>(DailyProgressService(), permanent: true);
+    }
+    if (!Get.isRegistered<GoalService>()) {
+      Get.put<GoalService>(GoalService(), permanent: true);
+    }
+    if (!Get.isRegistered<PushNotificationService>()) {
+      Get.put<PushNotificationService>(PushNotificationService(), permanent: true);
+    }
+    if (!Get.isRegistered<NotificationSettingsService>()) {
+      Get.put<NotificationSettingsService>(NotificationSettingsService(), permanent: true);
+    }
+    if (!Get.isRegistered<YoloTfliteDetectorService>()) {
+      Get.put<YoloTfliteDetectorService>(YoloTfliteDetectorService(), permanent: true);
     }
   }
 }

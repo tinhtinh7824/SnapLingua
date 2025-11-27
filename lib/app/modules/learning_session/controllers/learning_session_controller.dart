@@ -634,16 +634,17 @@ class LearningSessionController extends GetxController {
       );
     }
 
-    if (sessionType == 'review' && Get.isRegistered<DailyProgressService>()) {
-      for (final result in summary.results) {
-        if (result.firstTryCorrect == true) continue;
-        try {
-          await DailyProgressService.to.markActivity(
-            userId: userId,
-            activity: DailyActivityType.review,
-          );
-        } catch (_) {}
-      }
+    if (Get.isRegistered<DailyProgressService>()) {
+      try {
+        final activity = sessionType == 'review'
+            ? DailyActivityType.review
+            : DailyActivityType.learning;
+        await DailyProgressService.to.markActivity(
+          userId: userId,
+          activity: activity,
+          count: summary.results.length,
+        );
+      } catch (_) {}
     }
 
     final studySession = FirestoreStudySession(

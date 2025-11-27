@@ -115,9 +115,8 @@ class QuestService extends GetxService {
     });
 
     if (questCompletedNow && updatedQuest != null) {
-      // Previously we rewarded automatically when a quest completed.
-      // Change: do NOT grant rewards automatically here. Rewards must be claimed by the user
-      // by tapping the quest image. We still persist the completed state to Firestore.
+      // Increment monthly progress as soon as a daily quest is completed.
+      await _incrementMonthlyProgress(targetUserId);
     }
 
     await refreshQuests();
@@ -224,7 +223,14 @@ class QuestService extends GetxService {
         _dailyQuestCollection.doc(_composeDailyDocId(userId, DateTime.now()));
     final snapshot = await docRef.get();
     if (snapshot.exists && snapshot.data() != null) {
-      return FirestoreDailyQuestDay.fromSnapshot(snapshot);
+      final existing = FirestoreDailyQuestDay.fromSnapshot(snapshot);
+      // Ensure we always have 3 quests; if not, regenerate for today.
+      if (existing.quests.length == 3) {
+        return existing;
+      }
+      final regenerated = await _createTodayDoc(userId);
+      await docRef.set(regenerated.toMap());
+      return regenerated;
     }
     final created = await _createTodayDoc(userId);
     await docRef.set(created.toMap());

@@ -1,6 +1,12 @@
 import 'package:get/get.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/daily_progress_service.dart';
+import '../../../data/services/firestore_service.dart';
 import '../../../data/services/local_storage_service.dart';
+import '../../../data/services/quest_service.dart';
 import '../../../routes/app_pages.dart';
+import '../../home/controllers/home_stats_controller.dart';
+import '../../home/controllers/learning_tab_controller.dart';
 
 class SplashController extends GetxController {
   final RxBool _isLoading = true.obs;
@@ -26,7 +32,7 @@ class SplashController extends GetxController {
       _errorMessage.value = '';
 
       // Small delay for splash animation
-      await Future.delayed(const Duration(milliseconds: 1500));
+      await Future.delayed(const Duration(milliseconds: 3000));
 
       // Check first launch
       final isFirstLaunch = await LocalStorageService.isFirstLaunch();
@@ -39,6 +45,7 @@ class SplashController extends GetxController {
       // Check login status
       final isLoggedIn = await LocalStorageService.isLoggedIn();
       if (isLoggedIn) {
+        await _preloadHomeData();
         _isNavigating = true;
         Get.offAllNamed(Routes.home);
         return;
@@ -61,5 +68,34 @@ class SplashController extends GetxController {
 
   void retry() {
     _init();
+  }
+
+  /// Preloads data/services required by the home screen so it appears instantly.
+  Future<void> _preloadHomeData() async {
+    // Ensure core services are registered
+    if (!Get.isRegistered<AuthService>()) {
+      Get.put<AuthService>(AuthService(), permanent: true);
+    }
+    if (!Get.isRegistered<FirestoreService>()) {
+      Get.put<FirestoreService>(FirestoreService(), permanent: true);
+    }
+    if (!Get.isRegistered<DailyProgressService>()) {
+      Get.put<DailyProgressService>(DailyProgressService(), permanent: true);
+    }
+    if (!Get.isRegistered<QuestService>()) {
+      Get.put<QuestService>(QuestService(), permanent: true);
+    }
+
+    // Home stats
+    final homeStats = Get.isRegistered<HomeStatsController>()
+        ? Get.find<HomeStatsController>()
+        : Get.put<HomeStatsController>(HomeStatsController(), permanent: true);
+    await homeStats.load();
+
+    // Learning tab (new words, review, daily/monthly quests)
+    final learning = Get.isRegistered<LearningTabController>()
+        ? Get.find<LearningTabController>()
+        : Get.put<LearningTabController>(LearningTabController(), permanent: true);
+    await learning.refreshProgress();
   }
 }

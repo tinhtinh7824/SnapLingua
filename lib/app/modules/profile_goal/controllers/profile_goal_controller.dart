@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../data/services/goal_service.dart';
+import '../../../data/services/daily_progress_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../home/controllers/learning_tab_controller.dart';
 
 class ProfileGoalController extends GetxController {
   ProfileGoalController({GoalService? goalService})
@@ -48,6 +51,24 @@ class ProfileGoalController extends GetxController {
         learnGoal: learn,
         reviewGoal: review,
       );
+
+      // Persist targets to today's daily_progress for the logged-in user
+      if (Get.isRegistered<AuthService>()) {
+        final auth = AuthService.to;
+        if (auth.isLoggedIn && auth.currentUserId.isNotEmpty) {
+          await DailyProgressService.to.setDailyTargets(
+            userId: auth.currentUserId,
+            learnTarget: learn,
+            reviewTarget: review,
+          );
+        }
+      }
+
+      // Refresh home/learning tab if present
+      if (Get.isRegistered<LearningTabController>()) {
+        await LearningTabController.to.refreshProgress();
+      }
+
       Get.back(result: true);
       Get.snackbar(
         'Đã cập nhật',

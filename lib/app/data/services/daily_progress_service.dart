@@ -8,6 +8,7 @@ import 'package:snaplingua/app/routes/app_pages.dart';
 import '../models/firestore_daily_progress.dart';
 import 'firestore_service.dart';
 import 'quest_service.dart';
+import 'auth_service.dart';
 
 const int _kDailyXpCap = 500;
 
@@ -85,12 +86,14 @@ class DailyProgressService extends GetxService {
   Future<void> markActivity({
     required String userId,
     required DailyActivityType activity,
+    int count = 1,
     DateTime? occurredAt,
   }) async {
     final update = await _recordDailyProgress(
       userId: userId,
       activity: activity,
       xpDelta: 0,
+      count: count,
       occurredAt: occurredAt,
     );
 
@@ -179,6 +182,61 @@ class DailyProgressService extends GetxService {
     final normalizedMonth = DateTime(month.year, month.month);
     final monthValue = normalizedMonth.month.toString().padLeft(2, '0');
     return '${normalizedMonth.year}-$monthValue';
+  }
+
+  /// Update today's targets (learn/review) in Firestore and cache.
+  Future<void> setDailyTargets({
+    required String userId,
+    required int learnTarget,
+    required int reviewTarget,
+    DateTime? date,
+  }) async {
+    if (userId.isEmpty || userId == 'guest') return;
+    final targetDate = _dateOnly(date ?? DateTime.now());
+    final progressId = _composeProgressId(userId, targetDate);
+    final docRef = _dailyProgressCollection.doc(progressId);
+
+    await _firestore.runTransaction<void>((transaction) async {
+      final snapshot = await transaction.get(docRef);
+      FirestoreDailyProgress progress;
+      if (snapshot.exists && snapshot.data() != null) {
+        progress = FirestoreDailyProgress.fromSnapshot(snapshot);
+      } else {
+        progress = FirestoreDailyProgress(
+          progressId: progressId,
+          userId: userId,
+          date: targetDate,
+          newTarget: 0,
+          newLearned: 0,
+          reviewDue: 0,
+          reviewDone: 0,
+          streak: 0,
+          xpGained: 0,
+        );
+      }
+
+      final updated = progress.copyWith(
+        newTarget: learnTarget,
+        reviewDue: reviewTarget,
+        date: targetDate,
+      );
+
+      transaction.set(docRef, updated.toMap());
+
+      // Update cache if present
+      final monthKey = _monthCacheKey(targetDate);
+      final userCache = _monthlyCache[userId];
+      if (userCache != null && userCache.containsKey(monthKey)) {
+        final list = userCache[monthKey]!;
+        final idx = list.indexWhere((p) => p.progressId == progressId);
+        if (idx >= 0) {
+          list[idx] = updated;
+        } else {
+          list.add(updated);
+          list.sort((a, b) => a.date.compareTo(b.date));
+        }
+      }
+    });
   }
 
   Future<void> _maybeNotifyStreakMilestone({
@@ -336,6 +394,7 @@ class DailyProgressService extends GetxService {
     required String userId,
     required DailyActivityType activity,
     required int xpDelta,
+    int count = 1,
     DateTime? occurredAt,
   }) async {
     final activityDate = _dateOnly(occurredAt ?? DateTime.now());
@@ -378,7 +437,7 @@ class DailyProgressService extends GetxService {
       }
 
       updatedProgress = updatedProgress.copyWith(date: activityDate);
-      updatedProgress = _incrementCounters(updatedProgress, activity);
+      updatedProgress = _incrementCounters(updatedProgress, activity, count);
       final hasActivityAfter = _hasActivity(updatedProgress);
 
       transaction.set(docRef, updatedProgress.toMap());
@@ -456,16 +515,18 @@ class DailyProgressService extends GetxService {
   FirestoreDailyProgress _incrementCounters(
     FirestoreDailyProgress progress,
     DailyActivityType activity,
+    int count,
   ) {
+    final delta = count < 0 ? 0 : count;
     switch (activity) {
       case DailyActivityType.learning:
-        return progress.copyWith(newLearned: progress.newLearned + 1);
+        return progress.copyWith(newLearned: progress.newLearned + delta);
       case DailyActivityType.review:
-        return progress.copyWith(reviewDone: progress.reviewDone + 1);
+        return progress.copyWith(reviewDone: progress.reviewDone + delta);
       case DailyActivityType.camera:
-        return progress.copyWith(reviewDue: progress.reviewDue + 1);
+        return progress.copyWith(reviewDue: progress.reviewDue + delta);
       case DailyActivityType.flashcard:
-        return progress.copyWith(newTarget: progress.newTarget + 1);
+        return progress.copyWith(newTarget: progress.newTarget + delta);
       case DailyActivityType.other:
         return progress;
     }

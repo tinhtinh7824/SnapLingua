@@ -29,6 +29,13 @@ class NotificationSettingsService extends GetxService {
   final RxBool contextualAllowed = false.obs;
   final Rx<TimeOfDay> morningTime = _defaultMorning.obs;
   final Rx<TimeOfDay> eveningTime = _defaultEvening.obs;
+  // Đơn giản hoá: tần suất chỉ lưu tại client (chưa có trường trên Firestore)
+  final RxString frequency = 'Hằng ngày'.obs;
+  final List<String> availableFrequencies = <String>[
+    'Hằng ngày',
+    'Mỗi 2 ngày',
+    'Hằng tuần',
+  ];
 
   FirestoreNotificationSettings? _current;
   bool _hasInitialized = false;
@@ -108,6 +115,16 @@ class NotificationSettingsService extends GetxService {
   Future<void> updateEveningTime(TimeOfDay time) async {
     eveningTime.value = time;
     await _persistSettings(evening: time);
+  }
+
+  // Aliases cho UI cũ
+  Rx<TimeOfDay> get reminderTime => morningTime;
+  Future<void> updateTime(TimeOfDay time) => updateMorningTime(time);
+  Future<void> updateEnabled(bool enabled) => updatePushEnabled(enabled);
+
+  Future<void> updateFrequency(String value) async {
+    frequency.value = value;
+    // Hiện chưa có field trên Firestore; nếu sau này cần lưu, bổ sung tại đây.
   }
 
   Future<void> updateContextualAllowed(bool value) async {

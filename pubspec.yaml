@@ -35,6 +35,7 @@ dependencies:
 
   # ML/AI On-device
   tflite_flutter: ^0.10.4
+  # Using existing TFLite infrastructure instead of ONNX due to package availability
 
   # Networking
   dio: ^5.4.0
@@ -111,6 +112,7 @@ flutter:
     - assets/animations/
     - assets/icons/
     - assets/ml_models/
+    - assets/models/  # ONNX models directory
     - assets/sounds/
 
   fonts:

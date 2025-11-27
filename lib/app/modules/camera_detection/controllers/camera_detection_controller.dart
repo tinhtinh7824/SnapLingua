@@ -104,7 +104,7 @@ class CameraDetectionController extends GetxController {
     }
   }
 
-  /// Upload ảnh lên YOLO service và nhận diện
+  /// Upload ảnh lên detection service và nhận diện
   Future<void> _uploadAndDetect() async {
     if (_image.value == null) return;
 
@@ -113,8 +113,7 @@ class CameraDetectionController extends GetxController {
     try {
       print('⚡ Bắt đầu nhận diện on-device bằng TFLite...');
 
-      final result =
-          await OnDeviceDetectionService.instance.detect(_image.value!);
+      final result = await OnDeviceDetectionService.instance.detect(_image.value!);
 
       if (result.detections.isEmpty) {
         _showError('Không phát hiện được đối tượng nào');
@@ -125,7 +124,7 @@ class CameraDetectionController extends GetxController {
         for (final d in result.detections) d.label,
       };
 
-      print('✅ Nhận diện on-device được ${detectedWords.length} từ');
+      print('✅ Nhận diện on-device được ${detectedWords.length} từ: $detectedWords');
 
       // Navigate to result page
       Get.toNamed(

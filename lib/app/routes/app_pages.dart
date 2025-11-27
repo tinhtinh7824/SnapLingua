@@ -49,6 +49,8 @@ import '../modules/community_member_profile/bindings/community_member_profile_bi
 import '../modules/community_member_profile/views/community_member_profile_view.dart';
 import '../modules/community_detail/bindings/community_detail_binding.dart';
 import '../modules/community_detail/views/community_detail_view.dart';
+import '../modules/learning_session/bindings/learning_session_binding.dart';
+import '../modules/learning_session/views/learning_session_view.dart';
 
 part 'app_routes.dart';
 
@@ -182,6 +184,11 @@ class AppPages {
       name: _Paths.vocabularyList,
       page: () => const VocabularyListView(),
       binding: VocabularyListBinding(),
+    ),
+    GetPage(
+      name: _Paths.learningSession,
+      page: () => const LearningSessionView(),
+      binding: LearningSessionBinding(),
     ),
     GetPage(
       name: _Paths.cameraDetection,

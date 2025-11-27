@@ -14,6 +14,10 @@ class ReviewView extends GetView<ReviewController> {
   const ReviewView({super.key});
 
   @override
+  ReviewController get controller =>
+      Get.isRegistered<ReviewController>() ? Get.find<ReviewController>() : Get.put(ReviewController());
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
