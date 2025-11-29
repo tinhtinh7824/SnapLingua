@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../vocabulary_topic/controllers/vocabulary_topic_controller.dart';
 import '../../../data/services/auth_service.dart';
@@ -9,6 +10,7 @@ class VocabularyFlashcardController extends GetxController {
   late final List<VocabularyTopicItem> items;
   late final String topicName;
   late final PageController pageController;
+  late final FlutterTts _tts;
 
   final RxInt _currentIndex = 0.obs;
   final RxBool _showBack = false.obs;
@@ -22,6 +24,8 @@ class VocabularyFlashcardController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _tts = FlutterTts();
+    _initTts();
     final args = Get.arguments as Map<String, dynamic>?;
     final incomingItems =
         args != null && args['items'] is List<VocabularyTopicItem>
@@ -41,6 +45,7 @@ class VocabularyFlashcardController extends GetxController {
 
   @override
   void onClose() {
+    _tts.stop();
     pageController.dispose();
     super.onClose();
   }
@@ -98,13 +103,21 @@ class VocabularyFlashcardController extends GetxController {
     Get.snackbar('Flashcard', 'Bạn đã hoàn thành ôn tập "$topicName"');
   }
 
-  void playAudio(VocabularyTopicItem item) {
-    Get.snackbar(
-      'Đang phát âm',
-      'Tính năng âm thanh đang được phát triển',
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 1),
-    );
+  Future<void> playAudio(VocabularyTopicItem item) async {
+    final text = item.word.trim();
+    if (text.isEmpty) return;
+
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {
+      Get.snackbar(
+        'Lỗi',
+        'Không thể phát âm. Vui lòng thử lại.',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 1),
+      );
+    }
   }
 
   void previousCard() {
@@ -123,5 +136,19 @@ class VocabularyFlashcardController extends GetxController {
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
+  }
+
+  Future<void> _initTts() async {
+    try {
+      final languages = await _tts.getLanguages;
+      if (languages != null && languages.contains('en-US')) {
+        await _tts.setLanguage('en-US');
+      }
+      await _tts.setPitch(1.0);
+      await _tts.setSpeechRate(0.45);
+      await _tts.setVolume(1.0);
+    } catch (_) {
+      // Ignore TTS init errors to avoid blocking UI
+    }
   }
 }

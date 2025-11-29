@@ -512,6 +512,15 @@ class DailyProgressService extends GetxService {
     );
   }
 
+  /// Public helper to calculate the current streak ending on [date] (default: today).
+  Future<int> calculateStreak({
+    required String userId,
+    DateTime? date,
+  }) async {
+    if (userId.isEmpty) return 0;
+    return _calculateStreakEndingOn(userId, date ?? DateTime.now());
+  }
+
   FirestoreDailyProgress _incrementCounters(
     FirestoreDailyProgress progress,
     DailyActivityType activity,

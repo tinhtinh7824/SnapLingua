@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -8,33 +9,10 @@ import 'package:get/get.dart';
 import '../controllers/community_controller.dart';
 import '../../community_detail/controllers/community_detail_controller.dart';
 import '../../community_detail/views/community_detail_view.dart';
+import '../../community_detail/bindings/community_detail_binding.dart';
 import '../../../routes/app_pages.dart';
 import 'study_group_tab_view.dart';
 import 'community_leaderboard_view.dart';
-
-// Community models - adding missing class definitions
-class CommunityComment {
-  CommunityComment({
-    required this.id,
-    required this.userName,
-    required this.content,
-    required this.avatarUrl,
-    this.isPending = false,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
-
-  final String id;
-  final String userName;
-  final String content;
-  final String avatarUrl;
-  final bool isPending;
-  final DateTime createdAt;
-}
-
-class CommunityDetailArguments {
-  CommunityDetailArguments({required this.post});
-  final CommunityPost post;
-}
 
 // Constants for validation and configuration
 const int _maxTopicLength = 50;
@@ -1222,8 +1200,7 @@ class _FeedCard extends StatelessWidget {
                     children: [
                       for (var i = 0; i < highlightComments.length; i++) ...[
                         _CommentPreviewString(
-                          commentText: highlightComments[i],
-                          index: i + 1,
+                          comment: highlightComments[i],
                         ),
                         if (i < highlightComments.length - 1)
                           SizedBox(height: 12.h),
@@ -1748,8 +1725,9 @@ class _FeedCard extends StatelessWidget {
       }
 
       communityController.markPostAsViewed(post);
-      Get.toNamed(
-        Routes.communityDetail,
+      Get.to(
+        () => const CommunityDetailView(),
+        binding: CommunityDetailBinding(),
         arguments: CommunityDetailArguments(post: post),
       );
     } catch (e) {
@@ -2066,18 +2044,19 @@ class _NavButton extends StatelessWidget {
 
 class _CommentPreviewString extends StatelessWidget {
   const _CommentPreviewString({
-    required this.commentText,
-    required this.index,
+    required this.comment,
   });
 
-  final String commentText;
-  final int index;
+  final CommunityPostComment comment;
 
   @override
   Widget build(BuildContext context) {
-    final content = commentText.trim();
-    final userName = 'Thành viên $index';
-    final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'T';
+    final content = comment.content.trim();
+    final userName = comment.userName.trim().isNotEmpty
+        ? comment.userName.trim()
+        : 'Thành viên';
+    final initial =
+        userName.isNotEmpty ? userName.characters.first.toUpperCase() : 'T';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

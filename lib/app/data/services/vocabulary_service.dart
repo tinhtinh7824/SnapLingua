@@ -17,6 +17,98 @@ class VocabularyService extends GetxService {
   static const String statusMastered = 'mastered';
   static const String statusNew = 'new';
 
+  // Create or update a custom vocabulary word and link it to a user
+  Future<Vocabulary?> saveCustomWord({
+    required String userId,
+    required String word,
+    required String translation,
+    String? phonetic,
+    String? example,
+    String? audioUrl,
+    String category = 'personal',
+  }) async {
+    try {
+      final realm = _realmService.realm;
+      if (realm == null) throw Exception('Realm not initialized');
+      final trimmedWord = word.trim();
+      final trimmedTranslation = translation.trim();
+      if (trimmedWord.isEmpty || trimmedTranslation.isEmpty) {
+        throw Exception('Word and translation are required');
+      }
+
+      Vocabulary? vocab;
+      realm.write(() {
+        final matches =
+            realm.query<Vocabulary>('word == \$0', [trimmedWord]);
+        if (matches.isNotEmpty) {
+          vocab = matches.first;
+          vocab!
+            ..translation = trimmedTranslation
+            ..phonetic = phonetic ?? vocab!.phonetic
+            ..pronunciation = phonetic ?? vocab!.pronunciation
+            ..example = example ?? vocab!.example
+            ..audioUrl = audioUrl ?? vocab!.audioUrl
+            ..definition = vocab!.definition.isEmpty
+                ? trimmedTranslation
+                : vocab!.definition
+            ..category = category
+            ..isActive = true
+            ..updatedAt = DateTime.now();
+        } else {
+          vocab = Vocabulary(
+            DateTime.now().millisecondsSinceEpoch.toString(),
+            trimmedWord,
+            trimmedTranslation,
+            'medium',
+            category,
+            1,
+            true,
+            DateTime.now(),
+            pronunciation: phonetic,
+            phonetic: phonetic,
+            translation: trimmedTranslation,
+            example: example,
+            audioUrl: audioUrl,
+            updatedAt: DateTime.now(),
+          );
+          realm.add(vocab!);
+        }
+
+        final userMatches = realm.query<UserVocabulary>(
+          'userId == \$0 AND vocabularyId == \$1',
+          [userId, vocab!.id],
+        );
+
+        if (userMatches.isEmpty) {
+          final userVocab = UserVocabulary(
+            DateTime.now().millisecondsSinceEpoch.toString(),
+            userId,
+            vocab!.id,
+            0,
+            0,
+            2.5,
+            1,
+            0,
+            0,
+            false,
+            false,
+            statusNotStarted,
+            DateTime.now(),
+            nextReviewDate: DateTime.now().add(const Duration(days: 1)),
+            lastReviewedAt: null,
+            updatedAt: DateTime.now(),
+          );
+          realm.add(userVocab);
+        }
+      });
+
+      return vocab;
+    } catch (e) {
+      print('Error saving custom word: $e');
+      return null;
+    }
+  }
+
   // Get all vocabulary words
   Future<List<Vocabulary>> getAllVocabulary() async {
     try {

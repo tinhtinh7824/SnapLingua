@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/example_sentence_service.dart';
+import '../../../data/services/vocabulary_service.dart';
+import '../../vocabulary_flashcard/bindings/vocabulary_flashcard_binding.dart';
+import '../../vocabulary_flashcard/views/vocabulary_flashcard_view.dart';
 
 class VocabularyTopicItem {
   VocabularyTopicItem({
@@ -40,10 +48,13 @@ class VocabularyTopicArguments {
 class VocabularyTopicController extends GetxController {
   late final String topicName;
   final RxList<VocabularyTopicItem> items = <VocabularyTopicItem>[].obs;
+  final FlutterTts _tts = FlutterTts();
+  bool _isSavingWord = false;
 
   @override
   void onInit() {
     super.onInit();
+    _initTts();
     final args = Get.arguments as VocabularyTopicArguments?;
     if (args != null) {
       topicName = args.topicName;
@@ -54,12 +65,160 @@ class VocabularyTopicController extends GetxController {
     }
   }
 
+  @override
+  void onClose() {
+    _tts.stop();
+    super.onClose();
+  }
+
+  Future<void> playAudio(VocabularyTopicItem item) async {
+    final text = item.word.trim();
+    if (text.isEmpty) return;
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {
+      Get.snackbar(
+        'Phát âm',
+        'Không thể phát âm, vui lòng thử lại.',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 1),
+      );
+    }
+  }
+
+  Future<void> _initTts() async {
+    try {
+      final languages = await _tts.getLanguages;
+      if (languages != null && languages.contains('en-US')) {
+        await _tts.setLanguage('en-US');
+      }
+      await _tts.setPitch(1.0);
+      await _tts.setSpeechRate(0.45);
+      await _tts.setVolume(1.0);
+    } catch (_) {
+      // bỏ qua lỗi khởi tạo TTS
+    }
+  }
+
   void onFlashcardPressed() {
-    Get.snackbar('Flashcard', 'Coming soon!');
+    if (items.isEmpty) {
+      Get.snackbar(
+        'Flashcard',
+        'Chưa có thẻ từ vựng để ôn tập.',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 1),
+      );
+      return;
+    }
+
+    Get.to(
+      () => const VocabularyFlashcardView(),
+      binding: VocabularyFlashcardBinding(),
+      arguments: {
+        'items': items.toList(),
+        'topicName': topicName,
+      },
+    );
   }
 
   void onAddVocabularyPressed() {
-    Get.snackbar('Thêm từ', 'Tính năng đang phát triển');
+    final enController = TextEditingController();
+    final viController = TextEditingController();
+    Get.bottomSheet(
+      SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 50,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDEE6EE),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Thêm từ vựng',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: enController,
+                decoration: const InputDecoration(
+                  labelText: 'Từ vựng Tiếng Anh',
+                  hintText: 'Nhập từ vựng',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: viController,
+                decoration: const InputDecoration(
+                  labelText: 'Nghĩa Tiếng Việt',
+                  hintText: 'Nhập nghĩa',
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final en = enController.text.trim();
+                    final vi = viController.text.trim();
+                    if (en.isEmpty || vi.isEmpty) {
+                      Get.snackbar('Thiếu thông tin', 'Vui lòng nhập đủ từ và nghĩa');
+                      return;
+                    }
+                    if (_isSavingWord) return;
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    _isSavingWord = true;
+                    Get.dialog(
+                      const Center(child: CircularProgressIndicator()),
+                      barrierDismissible: false,
+                    );
+                    try {
+                      final details = await _fetchWordDetails(en, vi);
+                      final item = VocabularyTopicItem(
+                        word: en,
+                        ipa: details.ipa,
+                        translation: vi,
+                        exampleEn: details.exampleEn,
+                        exampleVi: details.exampleVi,
+                        status: VocabularyLearningStatus.notStarted,
+                      );
+                      await _persistWord(item);
+                      items.add(item);
+                      items.refresh();
+                      Get.back(); // close loading
+                      Get.back(); // close bottom sheet
+                      Get.snackbar('Thành công', 'Đã thêm từ vào chủ đề "$topicName"');
+                    } catch (e) {
+                      Get.back(); // close loading
+                      Get.snackbar(
+                        'Lỗi',
+                        e.toString(),
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    } finally {
+                      _isSavingWord = false;
+                    }
+                  },
+                  child: const Text('Lưu lại'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+    );
   }
 
   Future<void> onEditVocabulary(int index) async {
@@ -213,6 +372,85 @@ class VocabularyTopicController extends GetxController {
       ),
       backgroundColor: Colors.black.withOpacity(0.25),
       isScrollControlled: true,
+    );
+  }
+
+  Future<void> _persistWord(VocabularyTopicItem item) async {
+    if (!Get.isRegistered<AuthService>() || !AuthService.to.isLoggedIn) {
+      throw Exception('Bạn cần đăng nhập để lưu từ vựng.');
+    }
+    final userId = AuthService.to.currentUserId;
+    final saved = await VocabularyService.to.saveCustomWord(
+      userId: userId,
+      word: item.word,
+      translation: item.translation,
+      phonetic: item.ipa,
+      example: item.exampleEn,
+      category: topicName,
+    );
+    if (saved == null) {
+      throw Exception('Không thể lưu từ vào thư viện.');
+    }
+  }
+
+  Future<({String ipa, String exampleEn, String exampleVi})> _fetchWordDetails(
+    String word,
+    String translation,
+  ) async {
+    final fallbackExamples = ExampleSentenceService.generate(
+      word: word,
+      translation: translation,
+      topic: topicName,
+    );
+
+    String ipa = '';
+    String exampleEn = fallbackExamples.english;
+
+    try {
+      final url = Uri.parse(
+        'https://api.dictionaryapi.dev/api/v2/entries/en/${Uri.encodeComponent(word)}',
+      );
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is List && data.isNotEmpty) {
+          final first = data.first;
+          ipa = first['phonetic'] ?? '';
+          if (ipa.isEmpty &&
+              first['phonetics'] is List &&
+              first['phonetics'].isNotEmpty) {
+            final firstPhonetic = first['phonetics'].first;
+            if (firstPhonetic is Map && firstPhonetic['text'] is String) {
+              ipa = firstPhonetic['text'] as String;
+            }
+          }
+          if (first['meanings'] is List && first['meanings'].isNotEmpty) {
+            for (final meaning in first['meanings']) {
+              if (meaning is Map &&
+                  meaning['definitions'] is List &&
+                  meaning['definitions'].isNotEmpty) {
+                final def = meaning['definitions'].first;
+                if (def is Map && def['example'] is String) {
+                  exampleEn = def['example'] as String;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // ignore and use fallback
+    }
+
+    if (ipa.trim().isEmpty) {
+      ipa = '/${word.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "")}/';
+    }
+
+    return (
+      ipa: ipa,
+      exampleEn: exampleEn,
+      exampleVi: fallbackExamples.vietnamese,
     );
   }
 

@@ -25,6 +25,7 @@ import 'package:snaplingua/app/data/models/firestore_league_member.dart';
 import 'package:snaplingua/app/data/models/firestore_league_tier.dart';
 import 'package:snaplingua/app/data/models/firestore_daily_quest.dart';
 import 'package:snaplingua/app/data/services/quest_service.dart';
+import '../../community_chat/models/community_chat_models.dart' as chat_models;
 
 import '../../community_member_profile/controllers/community_member_profile_controller.dart';
 import '../../profile/controllers/profile_controller.dart';
@@ -349,7 +350,7 @@ class CommunityPost {
     bool isLiked = false,
     int initialVocabularyIndex = 0,
     bool initiallySelected = false,
-    List<String>? initialComments,
+    List<CommunityPostComment>? initialComments,
     bool isSendingComment = false,
     bool canFollowAuthor = false,
     bool isFollowingAuthor = false,
@@ -373,11 +374,19 @@ class CommunityPost {
         comments = (initialComments?.length ?? comments).obs,
         bookmarks = bookmarks.obs,
         isLiked = isLiked.obs,
-        commentMessages = (initialComments ??
-                List<String>.generate(
-                  comments,
-                  (index) => 'Bình luận ${index + 1}',
-                ))
+        commentMessages = ((initialComments != null)
+                ? List<CommunityPostComment>.from(initialComments)
+                : List<CommunityPostComment>.generate(
+                    comments,
+                    (index) => CommunityPostComment(
+                      id: 'placeholder_$index',
+                      userId: '',
+                      userName: 'Người dùng ${index + 1}',
+                      avatarUrl: '',
+                      content: 'Bình luận ${index + 1}',
+                      createdAt: DateTime.now(),
+                    ),
+                  ))
             .obs,
         isCommentsExpanded = false.obs,
         isVocabularyExpanded = true.obs,
@@ -404,7 +413,7 @@ class CommunityPost {
   final RxInt comments;
   final RxInt bookmarks;
   final RxBool isLiked;
-  final RxList<String> commentMessages;
+  final RxList<CommunityPostComment> commentMessages;
   final RxBool isCommentsExpanded;
   final RxBool isVocabularyExpanded;
   final RxBool isSendingComment;
@@ -432,6 +441,46 @@ class CommunityPostReport {
   final DateTime reportedAt;
 }
 
+class CommunityPostComment {
+  CommunityPostComment({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    required this.avatarUrl,
+    required this.content,
+    required this.createdAt,
+    this.isPending = false,
+  });
+
+  final String id;
+  final String userId;
+  final String userName;
+  final String avatarUrl;
+  final String content;
+  final DateTime createdAt;
+  final bool isPending;
+
+  CommunityPostComment copyWith({
+    String? id,
+    String? userId,
+    String? userName,
+    String? avatarUrl,
+    String? content,
+    DateTime? createdAt,
+    bool? isPending,
+  }) {
+    return CommunityPostComment(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      isPending: isPending ?? this.isPending,
+    );
+  }
+}
+
 class CommunityController extends GetxController {
   CommunityController({
     FirestoreService? firestoreService,
@@ -455,6 +504,7 @@ class CommunityController extends GetxController {
   StreamSubscription<List<FirestorePost>>? _postsSubscription;
   StreamSubscription<List<FirestoreGroup>>? _groupsSubscription;
   StreamSubscription<List<FirestoreGroupMember>>? _membershipSubscription;
+  Timer? _membershipRetryTimer;
   StreamSubscription<List<FirestoreLeagueTier>>? _leagueTiersSubscription;
   StreamSubscription<List<FirestoreLeagueCycle>>? _leagueCyclesSubscription;
   StreamSubscription<List<FirestoreLeagueMember>>? _leagueMembersSubscription;
@@ -639,6 +689,7 @@ class CommunityController extends GetxController {
     _leagueTiersSubscription?.cancel();
     _leagueCyclesSubscription?.cancel();
     _leagueMembersSubscription?.cancel();
+    _membershipRetryTimer?.cancel();
     // Cancel any leader pending listeners
     try {
       for (final sub in _leaderPendingSubscriptions.values) {
@@ -903,16 +954,12 @@ class CommunityController extends GetxController {
   void _handleLeagueTiers(List<FirestoreLeagueTier> tiers) {
     final ordered = List<FirestoreLeagueTier>.from(tiers)
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-    leagueTiers.assignAll(ordered);
-
-    if (ordered.isEmpty) {
-      selectedLeagueTier.value = null;
-      activeLeagueCycle.value = null;
-      _leagueCyclesSubscription?.cancel();
-      _leagueMembersSubscription?.cancel();
-      currentLeague.value = CommunityLeagueInfo.empty();
-      return;
+    final bool usedFallbackTier = ordered.isEmpty;
+    if (usedFallbackTier) {
+      final fallback = _fallbackTier();
+      ordered.add(fallback);
     }
+    leagueTiers.assignAll(ordered);
 
     final FirestoreLeagueTier? currentSelected = selectedLeagueTier.value;
     FirestoreLeagueTier nextTier = ordered.first;
@@ -933,6 +980,10 @@ class CommunityController extends GetxController {
     } else {
       _bindLeagueCycles(nextTier.tierId, preserveCycle: true);
     }
+
+    if (usedFallbackTier) {
+      _handleLeagueCycles(const []);
+    }
   }
 
   void _bindLeagueCycles(String tierId, {bool preserveCycle = false}) {
@@ -949,10 +1000,17 @@ class CommunityController extends GetxController {
     List<FirestoreLeagueCycle> cycles, {
     bool preserveCycle = false,
   }) {
+    final tier = selectedLeagueTier.value;
     if (cycles.isEmpty) {
-      activeLeagueCycle.value = null;
       _leagueMembersSubscription?.cancel();
-      currentLeague.value = CommunityLeagueInfo.empty();
+      if (tier == null) {
+        activeLeagueCycle.value = null;
+        currentLeague.value = CommunityLeagueInfo.empty();
+        return;
+      }
+      final fallbackCycle = _createLocalWeeklyCycle(tier.tierId);
+      activeLeagueCycle.value = fallbackCycle;
+      _mapLeagueMembers(const []);
       return;
     }
 
@@ -971,7 +1029,9 @@ class CommunityController extends GetxController {
     }
 
     final previousCycleId = currentCycleId;
-    final FirestoreLeagueCycle resolvedCycle = nextCycle ?? cycles.first;
+    final FirestoreLeagueCycle resolvedCycle = _alignCycleToCurrentWeek(
+      nextCycle ?? cycles.first,
+    );
     activeLeagueCycle.value = resolvedCycle;
 
     if (previousCycleId != resolvedCycle.cycleId) {
@@ -1003,6 +1063,7 @@ class CommunityController extends GetxController {
       }
 
       final _LeagueRuleSet ruleSet = _parseLeagueRule(tier.xpCapRule);
+      final int desiredCount = ruleSet.desiredParticipants;
       List<_LeagueParticipantData> rawParticipants = [];
 
       try {
@@ -1033,9 +1094,16 @@ class CommunityController extends GetxController {
         return rankA.compareTo(rankB);
       });
 
+      final rawSelection = _selectParticipantsForLeaderboard(
+        rawParticipants,
+        desiredCount,
+        cycle,
+        tier,
+      );
+
       final List<CommunityLeaderboardParticipant> participants = [];
-      for (var index = 0; index < rawParticipants.length; index++) {
-        final data = rawParticipants[index];
+      for (var index = 0; index < rawSelection.length; index++) {
+        final data = rawSelection[index];
         final rank = index + 1;
         final FirestoreUser? user = data.user;
         final String displayName = user?.displayName?.trim().isNotEmpty == true
@@ -1063,7 +1131,6 @@ class CommunityController extends GetxController {
         );
       }
 
-      final int desiredCount = ruleSet.desiredParticipants;
       final int deficit = desiredCount - participants.length;
       if (deficit > 0) {
         final virtuals = _generateVirtualParticipants(
@@ -1342,10 +1409,11 @@ class CommunityController extends GetxController {
 
   int _computeDaysRemaining(DateTime endAt) {
     final now = DateTime.now();
-    if (!endAt.isAfter(now)) {
+    final window = _currentWeekWindow(now);
+    if (now.isAfter(window.end)) {
       return 0;
     }
-    final diff = endAt.difference(now).inDays;
+    final diff = window.end.difference(now).inDays + 1;
     return diff.clamp(0, 7);
   }
 
@@ -1355,6 +1423,15 @@ class CommunityController extends GetxController {
     }
     final index = tier.orderIndex.clamp(0, _leagueRankIcons.length - 1);
     return _leagueRankIcons[index];
+  }
+
+  FirestoreLeagueTier _fallbackTier() {
+    return FirestoreLeagueTier(
+      tierId: 'local-tier',
+      name: 'Giải đấu tuần',
+      orderIndex: 0,
+      xpCapRule: null,
+    );
   }
 
   String? _formatXpCapDescription(Map<String, int> xpCaps) {
@@ -1477,11 +1554,13 @@ class CommunityController extends GetxController {
 
   void _bindUserMemberships() {
     _membershipSubscription?.cancel();
+    _membershipRetryTimer?.cancel();
     final userId = _resolveUserId();
     pendingJoinRequests.clear();
     if (userId == _fallbackUserId) {
       _activeMembership = null;
       joinedGroupDetails.value = null;
+      _scheduleMembershipRebind();
       return;
     }
     _membershipSubscription =
@@ -1490,6 +1569,37 @@ class CommunityController extends GetxController {
               onError: (error) =>
                   Get.log('Không thể tải thông tin thành viên nhóm: $error'),
             );
+  }
+
+  void _scheduleMembershipRebind() {
+    _membershipRetryTimer?.cancel();
+    _membershipRetryTimer =
+        Timer.periodic(const Duration(seconds: 2), (timer) {
+      final userId = _resolveUserId();
+      if (userId != _fallbackUserId) {
+        timer.cancel();
+        _bindUserMemberships();
+      }
+    });
+  }
+
+  Future<FirestoreGroupMember?> _resolveLeaderMembershipFallback() async {
+    final userId = _resolveUserId();
+    if (userId == _fallbackUserId) return null;
+    final leaderGroup = _firstWhereOrNull(
+      studyGroups,
+      (g) => g.leaderId == userId && g.status == 'active',
+    );
+    if (leaderGroup == null) return null;
+    return FirestoreGroupMember(
+      id: 'leader_${leaderGroup.groupId}_$userId',
+      groupId: leaderGroup.groupId,
+      userId: userId,
+      role: 'leader',
+      status: 'active',
+      joinedAt: leaderGroup.createdAt ?? DateTime.now(),
+      requestMessage: null,
+    );
   }
 
   void _handleMemberships(List<FirestoreGroupMember> memberships) {
@@ -1525,9 +1635,29 @@ class CommunityController extends GetxController {
       final activeMembership =
           _firstWhereOrNull(sorted, (member) => member.status == 'active');
       if (activeMembership == null) {
+        final leaderMembership = await _resolveLeaderMembershipFallback();
+        if (leaderMembership != null) {
+          _activeMembership = leaderMembership;
+          final existing = _findGroupById(leaderMembership.groupId);
+          if (existing != null) {
+            joinedGroupDetails.value =
+                await _buildGroupDetailsFromFirestore(existing);
+          } else {
+            final fetched =
+                await _firestoreService.getGroupById(leaderMembership.groupId);
+            if (fetched != null) {
+              final mapped = await _buildCommunityGroup(fetched);
+              studyGroups.add(mapped);
+              joinedGroupDetails.value =
+                  await _buildGroupDetailsFromFirestore(mapped);
+            }
+          }
+          return;
+        }
         _disposeGroupXpSubscriptions();
         _activeMembership = null;
         joinedGroupDetails.value = null;
+        _scheduleMembershipRebind();
         return;
       }
 
@@ -1840,6 +1970,76 @@ class CommunityController extends GetxController {
     return null;
   }
 
+  List<_LeagueParticipantData> _selectParticipantsForLeaderboard(
+    List<_LeagueParticipantData> raw,
+    int desiredCount,
+    FirestoreLeagueCycle cycle,
+    FirestoreLeagueTier tier,
+  ) {
+    if (raw.isEmpty) return const [];
+    final random = math.Random(
+      cycle.cycleId.hashCode ^ tier.tierId.hashCode ^ desiredCount.hashCode,
+    );
+    final String currentUserId = _resolveUserId();
+    final List<_LeagueParticipantData> pool = List.of(raw);
+    final _LeagueParticipantData? currentUser = _firstWhereOrNull(
+      pool,
+      (p) => p.member.userId == currentUserId,
+    );
+    if (currentUser != null) {
+      pool.removeWhere((p) => p.member.userId == currentUserId);
+    }
+
+    pool.shuffle(random);
+    final List<_LeagueParticipantData> selected = [];
+    if (currentUser != null) {
+      selected.add(currentUser);
+    }
+    for (final participant in pool) {
+      if (selected.length >= desiredCount) break;
+      selected.add(participant);
+    }
+    if (selected.isEmpty) {
+      selected.addAll(pool.take(math.min(desiredCount, pool.length)));
+    }
+    return selected;
+  }
+
+  FirestoreLeagueCycle _createLocalWeeklyCycle(String tierId) {
+    final window = _currentWeekWindow(DateTime.now());
+    final id =
+        'local_week_${window.start.year}${window.start.month.toString().padLeft(2, '0')}${window.start.day.toString().padLeft(2, '0')}';
+    return FirestoreLeagueCycle(
+      cycleId: id,
+      tierId: tierId,
+      startAt: window.start,
+      endAt: window.end,
+      status: 'running',
+    );
+  }
+
+  FirestoreLeagueCycle _alignCycleToCurrentWeek(FirestoreLeagueCycle cycle) {
+    final window = _currentWeekWindow(DateTime.now());
+    return cycle.copyWith(
+      startAt: window.start,
+      endAt: window.end,
+      status: 'running',
+    );
+  }
+
+  _WeekWindow _currentWeekWindow(DateTime reference) {
+    final start = _startOfWeek(reference);
+    final end =
+        start.add(const Duration(days: 7)).subtract(const Duration(seconds: 1));
+    return _WeekWindow(start: start, end: end);
+  }
+
+  DateTime _startOfWeek(DateTime reference) {
+    final normalized = DateTime(reference.year, reference.month, reference.day);
+    final delta = normalized.weekday - DateTime.monday;
+    return normalized.subtract(Duration(days: delta));
+  }
+
   void _updateGroupInList(CommunityStudyGroup updatedGroup) {
     final index = studyGroups
         .indexWhere((element) => element.groupId == updatedGroup.groupId);
@@ -1865,6 +2065,33 @@ class CommunityController extends GetxController {
     return null;
   }
 
+  Future<List<CommunityPostComment>> _mapCommentsWithUsers(
+    List<FirestorePostComment> comments,
+  ) async {
+    if (comments.isEmpty) return const [];
+    final List<CommunityPostComment> results = [];
+    for (final comment in comments) {
+      final user = await _getPostAuthor(comment.userId);
+      final name = user?.displayName?.trim().isNotEmpty == true
+          ? user!.displayName!.trim()
+          : 'Thành viên SnapLingua';
+      final avatar = _normalizeAvatar(user?.avatarUrl) ??
+          'https://i.pravatar.cc/150?u=${comment.userId.hashCode}';
+      results.add(
+        CommunityPostComment(
+          id: comment.commentId,
+          userId: comment.userId,
+          userName: name,
+          avatarUrl: avatar,
+          content: comment.content ?? '',
+          createdAt: comment.createdAt,
+          isPending: false,
+        ),
+      );
+    }
+    return results;
+  }
+
   Future<CommunityPost> _buildCommunityPost(FirestorePost post) async {
     final List<FirestorePostWord> words =
         await _firestoreService.getPostWords(post.postId);
@@ -1876,6 +2103,8 @@ class CommunityController extends GetxController {
       status: 'active',
       limit: 20,
     );
+    final List<CommunityPostComment> mappedComments =
+        await _mapCommentsWithUsers(comments);
 
     final FirestoreUser? author = await _getPostAuthor(post.userId);
     final String currentUserId = _resolveUserId();
@@ -1904,15 +2133,6 @@ class CommunityController extends GetxController {
         translation: translation,
       );
     }).toList(growable: false);
-
-    final List<String> commentMessages = comments
-        .where(
-          (comment) =>
-              comment.commentType == 'text' &&
-              (comment.content != null && comment.content!.trim().isNotEmpty),
-        )
-        .map((comment) => comment.content!.trim())
-        .toList(growable: false);
 
     String imageUrl = post.photoUrl;
     String? photoId = post.photoId;
@@ -1944,10 +2164,10 @@ class CommunityController extends GetxController {
       photoId: photoId,
       vocabularyItems: vocabularyItems,
       likes: likes.length,
-      comments: commentMessages.length,
+      comments: mappedComments.length,
       bookmarks: 0,
       isLiked: hasLiked,
-      initialComments: commentMessages,
+      initialComments: mappedComments,
       canFollowAuthor: canFollowAuthor,
       isFollowingAuthor: isFollowingAuthor,
       isFollowActionPending: false,
@@ -2401,9 +2621,46 @@ class CommunityController extends GetxController {
     final details = joinedGroupDetails.value;
     if (details == null) return;
     Get.toNamed(
-      '/community/chat', // Use literal route path
-      arguments: details,
+      Routes.communityChat,
+      arguments: _mapToChatDetails(details),
     );
+  }
+
+  chat_models.CommunityGroupDetails _mapToChatDetails(
+    CommunityGroupDetails details,
+  ) {
+    final group = details.group;
+    return chat_models.CommunityGroupDetails(
+      group: chat_models.CommunityStudyGroup(
+        groupId: group.groupId,
+        name: group.name,
+        requirement: group.requirement,
+        memberCount: group.memberCount,
+        assetImage: group.assetImage,
+        leaderId: group.leaderId,
+        leaderName: group.leaderName,
+        requireApproval: group.requireApproval,
+        description: group.description,
+        status: group.status,
+        createdAt: group.createdAt,
+      ),
+      currentMilestoneLabel: details.currentMilestoneLabel,
+      remainingLabel: _formatRemainingLabel(details.daysRemaining),
+      currentPoints: details.currentPoints,
+      milestones: details.milestones
+          .map((m) => m.label)
+          .toList(growable: false),
+      memberScores: details.memberScores
+          .map((score) =>
+              '${score.displayName}: ${score.totalPoints} XP (${score.weeklyPoints} XP/tuần)')
+          .toList(growable: false),
+    );
+  }
+
+  String _formatRemainingLabel(int days) {
+    if (days <= 0) return 'Đã kết thúc';
+    if (days == 1) return 'Còn 1 ngày';
+    return 'Còn $days ngày';
   }
 
   List<CommunityLeaderboardParticipant> get promotionLeaders =>
@@ -2715,6 +2972,9 @@ class CommunityController extends GetxController {
     }
   }
 
+  Future<void> refreshCommentsForPost(CommunityPost post) =>
+      _refreshPostComments(post);
+
   Future<void> addComment(CommunityPost post, String comment) async {
     // Enhanced input validation
     final trimmed = comment.trim();
@@ -2755,7 +3015,24 @@ class CommunityController extends GetxController {
       return;
     }
 
-    post.commentMessages.add(trimmed);
+    final currentUser = await _getPostAuthor(userId);
+    final displayName = currentUser?.displayName?.trim().isNotEmpty == true
+        ? currentUser!.displayName!.trim()
+        : 'Thành viên SnapLingua';
+    final avatarUrl = _normalizeAvatar(currentUser?.avatarUrl) ??
+        'https://i.pravatar.cc/150?u=${userId.hashCode}';
+
+    final pendingComment = CommunityPostComment(
+      id: 'pending_${DateTime.now().millisecondsSinceEpoch}',
+      userId: userId,
+      userName: displayName,
+      avatarUrl: avatarUrl,
+      content: trimmed,
+      createdAt: DateTime.now(),
+      isPending: true,
+    );
+
+    post.commentMessages.add(pendingComment);
     post.comments.value = post.commentMessages.length;
     showComments(post);
 
@@ -2768,6 +3045,13 @@ class CommunityController extends GetxController {
         commentType: 'text',
         content: trimmed,
       );
+      await _refreshPostComments(post);
+      if (insertedIndex >= 0 && insertedIndex < post.commentMessages.length) {
+        final updated =
+            post.commentMessages[insertedIndex].copyWith(isPending: false);
+        post.commentMessages[insertedIndex] = updated;
+        post.commentMessages.refresh();
+      }
       if (Get.isRegistered<QuestService>()) {
         await QuestService.to.incrementQuestProgress(
           DailyQuestType.engageCommunity,
@@ -2784,6 +3068,21 @@ class CommunityController extends GetxController {
         'Không thể gửi bình luận: $e',
         snackPosition: SnackPosition.BOTTOM,
       );
+    }
+  }
+
+  Future<void> _refreshPostComments(CommunityPost post) async {
+    try {
+      final comments = await _firestoreService.getPostComments(
+        post.id,
+        status: 'active',
+        limit: 50,
+      );
+      final mapped = await _mapCommentsWithUsers(comments);
+      post.commentMessages.assignAll(mapped);
+      post.comments.value = mapped.length;
+    } catch (e) {
+      Get.log('Không thể tải bình luận cho bài viết ${post.id}: $e');
     }
   }
 
@@ -3268,6 +3567,16 @@ class _PendingGroupMemberScore {
   final int weeklyXp;
   final bool isHighlighted;
   final DateTime joinedAt;
+}
+
+class _WeekWindow {
+  const _WeekWindow({
+    required this.start,
+    required this.end,
+  });
+
+  final DateTime start;
+  final DateTime end;
 }
 
 class _GroupCycleWindow {

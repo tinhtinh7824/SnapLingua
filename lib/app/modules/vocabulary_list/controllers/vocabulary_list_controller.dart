@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../vocabulary_flashcard/bindings/vocabulary_flashcard_binding.dart';
+import '../../vocabulary_flashcard/views/vocabulary_flashcard_view.dart';
+import '../../vocabulary_topic/controllers/vocabulary_topic_controller.dart';
+
 /// Simple data model for previewing vocabulary content without backend data.
 class VocabularyItem {
   VocabularyItem({
@@ -164,10 +168,14 @@ class VocabularyListController extends GetxController {
   }
 
   void openFlashcard() {
-    Get.snackbar(
-      'Demo',
-      'Chế độ flashcard chưa được bật trong bản demo.',
-      snackPosition: SnackPosition.BOTTOM,
+    final flashcardItems = _toFlashcardItems();
+    Get.to(
+      () => const VocabularyFlashcardView(),
+      binding: VocabularyFlashcardBinding(),
+      arguments: {
+        'items': flashcardItems,
+        'topicName': categoryName,
+      },
     );
   }
 
@@ -208,5 +216,32 @@ class VocabularyListController extends GetxController {
         ),
       ),
     );
+  }
+
+  List<VocabularyTopicItem> _toFlashcardItems() {
+    return _items
+        .map(
+          (item) => VocabularyTopicItem(
+            word: item.word,
+            ipa: item.phonetic ?? '',
+            translation: item.translation,
+            exampleEn: item.example ?? '',
+            exampleVi: item.translation,
+            status: _mapStatus(item.status),
+          ),
+        )
+        .toList();
+  }
+
+  VocabularyLearningStatus _mapStatus(String status) {
+    switch (status) {
+      case 'learning':
+      case 'reviewing':
+        return VocabularyLearningStatus.learning;
+      case 'mastered':
+        return VocabularyLearningStatus.learned;
+      default:
+        return VocabularyLearningStatus.notStarted;
+    }
   }
 }

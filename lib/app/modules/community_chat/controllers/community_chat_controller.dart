@@ -126,6 +126,19 @@ class CommunityChatController extends GetxController {
       return;
     }
 
+    final member = await _firestoreService.getGroupMembership(
+      groupId: groupDetails.group.groupId,
+      userId: userId,
+    );
+    if (member == null || member.status != 'active') {
+      Get.snackbar(
+        'Không thể gửi',
+        'Bạn không còn trong nhóm này.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
     CommunityChatMessage? pendingMessage;
     try {
       final senderName = _formatSenderName(
@@ -148,6 +161,7 @@ class CommunityChatController extends GetxController {
         messageType: 'text',
         content: trimmed,
       );
+      _scrollToBottom();
     } catch (e) {
       if (pendingMessage != null) {
         messages.remove(pendingMessage);

@@ -519,9 +519,22 @@ class _ChatInputState extends State<_ChatInput> {
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTextChange);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_handleTextChange);
+  }
+
+  void _handleTextChange() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _handleSend() async {
@@ -633,6 +646,7 @@ class _ChatInputState extends State<_ChatInput> {
                         : const Color(0xFF1B2B40),
                   ),
                   onSubmitted: (_) => _handleSend(),
+                  onChanged: (_) => _handleTextChange(),
                 ),
               ),
             ),

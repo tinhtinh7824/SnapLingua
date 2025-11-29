@@ -13,6 +13,8 @@ import '../../../routes/app_pages.dart';
 import '../../vocabulary_topic/controllers/vocabulary_topic_controller.dart';
 import '../../../data/models/firestore_dictionary_word.dart';
 import '../../../data/models/firestore_topic.dart';
+import '../../add_vocabulary_category/bindings/add_vocabulary_category_binding.dart';
+import '../../add_vocabulary_category/views/add_vocabulary_category_view.dart';
 import '../../../data/services/firestore_service.dart';
 
 class VocabularyCategory {
@@ -588,8 +590,9 @@ class ReviewController extends GetxController {
   }
 
   Future<void> onAddCategory() async {
-    final result = await Get.toNamed(
-      Routes.addVocabularyCategory,
+    final result = await Get.to(
+      () => const AddVocabularyCategoryView(),
+      binding: AddVocabularyCategoryBinding(),
     );
 
     if (result is Map<String, dynamic>) {

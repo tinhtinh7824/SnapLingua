@@ -10,46 +10,6 @@ import '../../../data/models/firestore_post_comment.dart';
 import '../../community/controllers/community_controller.dart';
 import '../controllers/community_detail_controller.dart';
 
-class CommunityComment {
-  CommunityComment({
-    required this.id,
-    required this.userName,
-    required this.content,
-    required this.avatarUrl,
-    this.isPending = false,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
-
-  final String id;
-  final String userName;
-  final String content;
-  final String avatarUrl;
-  final bool isPending;
-  final DateTime createdAt;
-
-  // Factory method to create from FirestorePostComment
-  factory CommunityComment.fromFirestore(FirestorePostComment comment, String userName, String avatarUrl) {
-    return CommunityComment(
-      id: comment.commentId,
-      userName: userName,
-      content: comment.content ?? '',
-      avatarUrl: avatarUrl,
-      isPending: false,
-    );
-  }
-
-  // Factory method for temporary/pending comments
-  factory CommunityComment.pending(String content, String userName, String avatarUrl) {
-    return CommunityComment(
-      id: 'pending_${DateTime.now().millisecondsSinceEpoch}',
-      userName: userName,
-      content: content,
-      avatarUrl: avatarUrl,
-      isPending: true,
-    );
-  }
-}
-
 class CommunityDetailView extends GetView<CommunityDetailController> {
   const CommunityDetailView({super.key});
 
@@ -443,13 +403,7 @@ class _CommentsSection extends StatelessWidget {
             itemCount: commentMessages.length,
             separatorBuilder: (context, index) => SizedBox(height: 12.h),
             itemBuilder: (context, index) {
-              final content = commentMessages[index];
-              final comment = CommunityComment(
-                id: 'comment_${index}',
-                userName: 'Người dùng ${index + 1}',
-                content: content,
-                avatarUrl: '', // Empty avatar URL - will show initials
-              );
+              final comment = commentMessages[index];
               return RepaintBoundary(
                 child: _CommentItem(comment: comment),
               );
@@ -496,14 +450,7 @@ class _CommentComposerState extends State<_CommentComposer> {
       _textController.clear();
       FocusScope.of(context).unfocus();
 
-      // Show success feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Bình luận đã được thêm'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+     
     } catch (e) {
       // Handle error gracefully
       debugPrint('Error adding comment: $e');
@@ -1003,7 +950,7 @@ void _showTopicPicker(
 class _CommentItem extends StatelessWidget {
   const _CommentItem({required this.comment});
 
-  final CommunityComment comment;
+  final CommunityPostComment comment;
 
   @override
   Widget build(BuildContext context) {

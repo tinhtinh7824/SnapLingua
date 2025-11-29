@@ -183,10 +183,15 @@ class _VocabularyCard extends StatelessWidget {
                                 color: const Color(0xFF0077B6),
                               ),
                             ),
-                            Icon(
-                              Icons.volume_up,
-                              size: 20.sp,
-                              color: const Color(0xFF1CB0F6),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => controller.playAudio(item),
+                              icon: Icon(
+                                Icons.volume_up,
+                                size: 20.sp,
+                                color: const Color(0xFF1CB0F6),
+                              ),
                             ),
                           ],
                         ),

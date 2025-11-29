@@ -24,9 +24,11 @@ abstract class Routes {
   static const review = _Paths.review;
   static const community = _Paths.community;
   static const communityDetail = _Paths.communityDetail;
+  static const communityChat = _Paths.communityChat;
   static const communityMemberProfile = _Paths.communityMemberProfile;
   static const vocabularyList = _Paths.vocabularyList;
   static const vocabularyTopic = _Paths.vocabularyTopic;
+  static const vocabularyFlashcard = _Paths.vocabularyFlashcard;
   static const addVocabularyCategory = _Paths.addVocabularyCategory;
   static const learningSession = _Paths.learningSession;
   static const cameraDetection = _Paths.cameraDetection;
@@ -57,9 +59,11 @@ abstract class _Paths {
   static const review = '/review';
   static const community = '/community';
   static const communityDetail = '/community/detail';
+  static const communityChat = '/community/chat';
   static const communityMemberProfile = '/community/member-profile';
   static const vocabularyList = '/vocabulary-list';
   static const vocabularyTopic = '/vocabulary-topic';
+  static const vocabularyFlashcard = '/vocabulary-flashcard';
   static const addVocabularyCategory = '/add-vocabulary-category';
   static const learningSession = '/learning-session';
   static const cameraDetection = '/camera-detection';

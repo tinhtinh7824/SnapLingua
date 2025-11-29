@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:snaplingua/app/data/services/auth_service.dart';
 import 'package:snaplingua/app/data/services/firestore_service.dart';
 
@@ -49,6 +50,7 @@ class CommunityMemberProfileController extends GetxController {
   final CommunityMemberProfileArguments? _initialArguments;
   final FirestoreService _firestoreService;
   final AuthService _authService;
+  final GetStorage _storage = GetStorage();
 
   late final Rx<ProfileSummary> summary;
   late final RxList<String> recentPosts;
@@ -59,6 +61,8 @@ class CommunityMemberProfileController extends GetxController {
   late final RxBool isVirtualProfile;
   late final RxBool isFollowLoading;
   late final RxBool showFollowButton;
+  bool _isLocalFollowMutation = false;
+  static const String _followingKey = 'community_following_ids';
 
   // Performance optimization - caching expensive operations
   String? _cachedUserId;
@@ -84,7 +88,8 @@ class CommunityMemberProfileController extends GetxController {
     }
     summary = args.summary.obs;
     recentPosts = args.recentPosts.obs;
-    isFollowing = args.isFollowing.obs;
+    final persistedFollow = _isPersistedFollowing(args.userId);
+    isFollowing = (persistedFollow || args.isFollowing).obs;
     leagueTier = RxnString(args.leagueTier);
     weeklyXp = RxnInt(args.weeklyXp);
     xpBreakdown = args.xpBreakdown.obs;
@@ -100,6 +105,11 @@ class CommunityMemberProfileController extends GetxController {
       }
       Future.microtask(() => _hydrateMemberDetails(userId));
     }
+    _persistFollowingState(
+      profileUserId: args.userId,
+      isFollowing: isFollowing.value,
+      suppressSync: true,
+    );
   }
 
   Future<void> toggleFollow() async {
@@ -133,10 +143,12 @@ class CommunityMemberProfileController extends GetxController {
     final wasFollowing = isFollowing.value;
 
     try {
+      _isLocalFollowMutation = true;
       if (wasFollowing) {
         // Optimistic update
         isFollowing.value = false;
         _applyFollowerDelta(-1);
+        _persistFollowingState(profileUserId: targetUserId, isFollowing: false);
 
         await _firestoreService.unfollowUser(
           userId: currentUserId,
@@ -147,9 +159,7 @@ class CommunityMemberProfileController extends GetxController {
           userId: targetUserId,
           isFollowing: false,
         );
-        if (Get.isRegistered<ProfileController>()) {
-          ProfileController.to.adjustFollowCounts(followingDelta: -1);
-        }
+        _applyFollowingDelta(-1);
 
         Get.log('Successfully unfollowed user $targetUserId');
       } else {
@@ -162,13 +172,13 @@ class CommunityMemberProfileController extends GetxController {
           targetUserId: targetUserId,
         );
 
+        _persistFollowingState(profileUserId: targetUserId, isFollowing: true);
+
         _notifyCommunityFollowUpdate(
           userId: targetUserId,
           isFollowing: true,
         );
-        if (Get.isRegistered<ProfileController>()) {
-          ProfileController.to.adjustFollowCounts(followingDelta: 1);
-        }
+        _applyFollowingDelta(1);
 
         // Send notification (non-blocking)
         _sendFollowNotification(
@@ -184,6 +194,11 @@ class CommunityMemberProfileController extends GetxController {
       // Rollback optimistic updates
       isFollowing.value = wasFollowing;
       _applyFollowerDelta(wasFollowing ? 1 : -1);
+      _applyFollowingDelta(wasFollowing ? 1 : -1);
+      _persistFollowingState(
+        profileUserId: targetUserId,
+        isFollowing: wasFollowing,
+      );
 
       Get.log('ToggleFollow error: $e');
       Get.snackbar(
@@ -192,6 +207,7 @@ class CommunityMemberProfileController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
+      _isLocalFollowMutation = false;
       isFollowLoading.value = false;
     }
   }
@@ -300,6 +316,10 @@ class CommunityMemberProfileController extends GetxController {
     required int followerDelta,
     required bool isFollowing,
   }) {
+    if (_isLocalFollowMutation) {
+      // Ignore echo from our own optimistic update to avoid double counting
+      return;
+    }
     // Validate inputs
     if (targetUserId.trim().isEmpty) {
       Get.log('ApplyExternalFollowUpdate: Invalid target user ID');
@@ -319,6 +339,10 @@ class CommunityMemberProfileController extends GetxController {
     }
 
     this.isFollowing.value = isFollowing;
+    _persistFollowingState(
+      profileUserId: targetUserId,
+      isFollowing: isFollowing,
+    );
     if (followerDelta != 0) {
       _applyFollowerDelta(followerDelta);
     }
@@ -479,15 +503,63 @@ class CommunityMemberProfileController extends GetxController {
       return;
     }
     final current = summary.value;
-    final nextFollowers = (current.followers + delta).clamp(0, double.infinity.toInt());
+    final nextFollowers = (current.followers + delta);
+    final clampedFollowers = nextFollowers < 0 ? 0 : nextFollowers;
     summary.value = current.copyWith(
-      followers: nextFollowers,
+      followers: clampedFollowers,
     );
     summary.refresh();
 
     // Update cache if valid
     if (_cachedFollowerCount != null) {
-      _cachedFollowerCount = nextFollowers;
+      _cachedFollowerCount = clampedFollowers;
+    }
+  }
+
+  void _applyFollowingDelta(int delta) {
+    if (delta == 0) return;
+    if (Get.isRegistered<ProfileController>()) {
+      try {
+        ProfileController.to.adjustFollowCounts(followingDelta: delta);
+      } catch (e) {
+        Get.log('Failed to adjust following count: $e');
+      }
+    }
+  }
+
+  bool _isPersistedFollowing(String? profileUserId) {
+    if (profileUserId == null || profileUserId.trim().isEmpty) return false;
+    final stored = _storage.read<List<dynamic>>(_followingKey);
+    if (stored == null) return false;
+    return stored
+        .whereType<String>()
+        .any((id) => id.trim() == profileUserId.trim());
+  }
+
+  void _persistFollowingState({
+    required String? profileUserId,
+    required bool isFollowing,
+    bool suppressSync = false,
+  }) {
+    if (profileUserId == null || profileUserId.trim().isEmpty) return;
+    final normalized = profileUserId.trim();
+    final stored = _storage.read<List<dynamic>>(_followingKey) ?? [];
+    final set = <String>{
+      ...stored.whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty)
+    };
+    if (isFollowing) {
+      set.add(normalized);
+    } else {
+      set.remove(normalized);
+    }
+    _storage.write(_followingKey, set.toList(growable: false));
+
+    if (!suppressSync && Get.isRegistered<ProfileController>()) {
+      try {
+        ProfileController.to.adjustFollowCounts(
+          followingDelta: isFollowing ? 1 : -1,
+        );
+      } catch (_) {}
     }
   }
 

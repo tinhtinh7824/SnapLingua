@@ -5,6 +5,7 @@ import '../../../data/services/daily_progress_service.dart';
 import '../../../data/models/firestore_daily_quest.dart';
 import '../../../data/models/firestore_monthly_quest.dart';
 import '../../../data/services/quest_service.dart';
+import '../../../data/services/goal_service.dart';
 
 class LearningTabController extends GetxController {
   static LearningTabController get to => Get.find<LearningTabController>();
@@ -43,12 +44,20 @@ class LearningTabController extends GetxController {
 
       final auth = AuthService.to;
       if (!auth.isLoggedIn || auth.currentUserId.isEmpty) {
+        final goalService = Get.isRegistered<GoalService>()
+            ? GoalService.to
+            : Get.put(GoalService());
         newLearned.value = 0;
         reviewDone.value = 0;
+        newTarget.value = goalService.dailyLearnGoal.value;
+        reviewDue.value = goalService.dailyReviewGoal.value;
         error.value = 'Bạn cần đăng nhập để xem tiến độ';
         return;
       }
 
+      final goalService = Get.isRegistered<GoalService>()
+          ? GoalService.to
+          : Get.put(GoalService());
       final progressService = DailyProgressService.to;
       final today = DateTime.now();
       List<FirestoreDailyProgress> monthly;
@@ -78,9 +87,18 @@ class LearningTabController extends GetxController {
       );
 
       newLearned.value = todayProgress.newLearned;
-      newTarget.value = todayProgress.newTarget > 0 ? todayProgress.newTarget : 15;
+      final learnGoal = goalService.dailyLearnGoal.value;
+      final normalizedLearnTarget =
+          todayProgress.newTarget > 0 ? todayProgress.newTarget : learnGoal;
+      newTarget.value =
+          [normalizedLearnTarget, learnGoal, newLearned.value].reduce((a, b) => a > b ? a : b);
+
       reviewDone.value = todayProgress.reviewDone;
-      reviewDue.value = todayProgress.reviewDue > 0 ? todayProgress.reviewDue : 30;
+      final reviewGoal = goalService.dailyReviewGoal.value;
+      final normalizedReviewDue =
+          todayProgress.reviewDue > 0 ? todayProgress.reviewDue : reviewGoal;
+      reviewDue.value =
+          [normalizedReviewDue, reviewGoal, reviewDone.value].reduce((a, b) => a > b ? a : b);
 
       // Quests
       await QuestService.to.refreshQuests();

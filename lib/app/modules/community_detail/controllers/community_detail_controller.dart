@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
 import '../../community/controllers/community_controller.dart';
@@ -17,8 +18,28 @@ class CommunityDetailController extends GetxController {
     final args = Get.arguments;
     if (args is CommunityDetailArguments) {
       post = args.post;
+      if (Get.isRegistered<CommunityController>()) {
+        Get.find<CommunityController>().refreshCommentsForPost(post);
+      }
     } else {
-      post = Get.find<CommunityController>().posts.first;
+      // Tránh gọi snackbar/back trong build: đợi sau frame đầu
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Get.snackbar('Lỗi', 'Không tìm thấy bài viết.');
+        Get.back();
+      });
+      // Giữ một post rỗng để tránh crash render
+      post = CommunityPost(
+        id: '',
+        authorId: '',
+        authorName: '',
+        authorAvatar: '',
+        postedAt: '',
+        imageUrl: '',
+        vocabularyItems: const [],
+        likes: 0,
+        comments: 0,
+        bookmarks: 0,
+      );
     }
     _initTts();
   }

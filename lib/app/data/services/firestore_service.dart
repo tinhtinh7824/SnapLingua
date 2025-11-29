@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 
@@ -15,6 +17,7 @@ import '../models/firestore_post_comment.dart';
 import '../models/firestore_post_like.dart';
 import '../models/firestore_post_word.dart';
 import '../models/firestore_user.dart';
+import '../models/firestore_user_inventory.dart';
 import '../models/firestore_user_badge.dart';
 import '../models/firestore_xp_transaction.dart';
 import '../models/firestore_personal_word.dart';
@@ -24,6 +27,7 @@ import '../models/firestore_topic.dart';
 import '../models/firestore_dictionary_word.dart';
 import '../../modules/learning_session/controllers/learning_session_controller.dart';
 import '../../modules/community/controllers/community_controller.dart';
+import 'firestore_service.purchase_models.dart';
 
 
 /// Central Firestore access layer.
@@ -81,6 +85,8 @@ class FirestoreService extends GetxService {
       _firestore.collection('post_likes');
   CollectionReference<Map<String, dynamic>> get _postComments =>
       _firestore.collection('post_comments');
+  CollectionReference<Map<String, dynamic>> get _userInventory =>
+      _firestore.collection('user_inventory');
 
   Future<FirestoreUser?> getUserById(String userId) async {
     if (userId.isEmpty) return null;
@@ -89,6 +95,99 @@ class FirestoreService extends GetxService {
       return null;
     }
     return FirestoreUser.fromSnapshot(doc);
+  }
+
+  Stream<FirestoreUser?> watchUserById(String userId) {
+    if (userId.isEmpty) return const Stream.empty();
+    return _users.doc(userId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return FirestoreUser.fromSnapshot(doc);
+    });
+  }
+
+  Stream<int> watchUnreadNotifications(String userId) {
+    if (userId.isEmpty) return const Stream.empty();
+    return _notifications
+        .where('user_id', isEqualTo: userId)
+        .where('read_at', isNull: true)
+        .snapshots()
+        .map((snap) => snap.docs.length);
+  }
+
+  Future<List<FirestoreUserInventory>> getUserInventory({
+    required String userId,
+  }) async {
+    if (userId.isEmpty) return [];
+    final snapshot = await _userInventory
+        .where('user_id', isEqualTo: userId)
+        .get();
+    return snapshot.docs.map(FirestoreUserInventory.fromSnapshot).toList();
+  }
+
+  Future<PurchaseItemResult> purchaseShopItem({
+    required String userId,
+    required String itemId,
+    required int price,
+    required bool isCoins,
+  }) async {
+    if (userId.isEmpty || itemId.isEmpty) {
+      throw Exception('Thiếu thông tin người dùng hoặc vật phẩm');
+    }
+
+    final inventoryDocId = '${userId}_$itemId';
+    final userDocRef = _users.doc(userId);
+    final inventoryDocRef = _userInventory.doc(inventoryDocId);
+
+    return _firestore.runTransaction<PurchaseItemResult>((transaction) async {
+      final userSnap = await transaction.get(userDocRef);
+      if (!userSnap.exists || userSnap.data() == null) {
+        throw Exception('Không tìm thấy người dùng');
+      }
+      final data = userSnap.data()!;
+      final currentScales = (data['scalesBalance'] as num?)?.toInt() ?? 0;
+      final currentGems = (data['gemsBalance'] as num?)?.toInt() ?? 0;
+
+      final available = isCoins ? currentScales : currentGems;
+      if (available < price) {
+        throw InsufficientFundsException(
+          currency: isCoins ? 'vảy' : 'ngọc',
+          requiredAmount: price,
+          availableAmount: available,
+        );
+      }
+
+      final newScales = isCoins ? currentScales - price : currentScales;
+      final newGems = isCoins ? currentGems : currentGems - price;
+
+      final inventorySnap = await transaction.get(inventoryDocRef);
+      int newQuantity = 1;
+      if (inventorySnap.exists && inventorySnap.data() != null) {
+        final invData = inventorySnap.data()!;
+        final currentQty = (invData['quantity'] as num?)?.toInt() ?? 0;
+        newQuantity = currentQty + 1;
+        transaction.update(inventoryDocRef, {'quantity': newQuantity});
+      } else {
+        transaction.set(inventoryDocRef, {
+          'user_id': userId,
+          'item_id': itemId,
+          'quantity': 1,
+          'created_at': Timestamp.fromDate(DateTime.now()),
+        });
+      }
+
+      transaction.update(userDocRef, {
+        'scalesBalance': newScales,
+        'gemsBalance': newGems,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+
+      return PurchaseItemResult(
+        newScalesBalance: newScales,
+        newGemsBalance: newGems,
+        newQuantity: newQuantity,
+        inventoryDocumentId: inventoryDocId,
+      );
+    });
   }
 
   Future<void> createUser({

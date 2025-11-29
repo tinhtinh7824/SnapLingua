@@ -149,13 +149,21 @@ class LearningTabView extends GetView<HomeStatsController> {
       backgroundColor: const Color(0xFFE5FFFD),
       body: Obx(() {
         final loading = controller.isLoading.value;
+        final statsUser = controller.user.value;
+        final streak = controller.streak.value;
+        final unread = controller.unreadNotifications.value;
         return Column(
           children: [
             // AppBar với màu BBFFEE
             Container(
               color: const Color(0xFFBBFFEE),
               child: SafeArea(
-                child: _buildHeader(devicePixelRatio),
+                child: _buildHeader(
+                  devicePixelRatio,
+                  user: statsUser,
+                  streak: streak,
+                  unreadNotifications: unread,
+                ),
               ),
             ),
 
@@ -342,22 +350,48 @@ class LearningTabView extends GetView<HomeStatsController> {
     }
   }
 
-  Widget _buildHeader(double devicePixelRatio) {
-    final statsUser = controller.user.value;
-    final scales = statsUser?.scalesBalance ?? 0;
-    final gems = statsUser?.gemsBalance ?? 0;
-    // streak placeholder; could be tied to DailyProgress
-    final streak = 0;
+  Widget _buildHeader(
+    double devicePixelRatio, {
+    required FirestoreUser? user,
+    required int streak,
+    required int unreadNotifications,
+  }) {
+    final scales = user?.scalesBalance ?? 0;
+    final gems = user?.gemsBalance ?? 0;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
+          children: [
           _buildStatItem('assets/images/vay.png', '$scales', const Color(0xFFB8C3D1), Routes.shop, devicePixelRatio),
           _buildStatItem('assets/images/ngoc.png', '$gems', const Color(0xFF0571E6), Routes.shop, devicePixelRatio),
           _buildStatItem('assets/images/streak/streak6.png', '$streak', const Color(0xFF4E67F8), Routes.streak, devicePixelRatio),
-          _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification, devicePixelRatio),
+          Stack(
+            children: [
+              _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification, devicePixelRatio),
+              if (unreadNotifications > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10.r),
+                    ),
+                    child: Text(
+                      unreadNotifications > 99 ? '99+' : '$unreadNotifications',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -373,8 +407,19 @@ class LearningTabView extends GetView<HomeStatsController> {
   ) {
     return GestureDetector(
       onTap: route != null
-          ? () {
-              Get.toNamed(route);
+          ? () async {
+              try {
+                Get.log('LearningTab: navigate to $route');
+                await Get.toNamed(route);
+              } catch (e) {
+                Get.snackbar(
+                  'Lỗi',
+                  'Không thể mở màn hình: $e',
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: const Duration(seconds: 2),
+                );
+                Get.log('Navigate error: $e');
+              }
             }
           : null,
       child: Container(
