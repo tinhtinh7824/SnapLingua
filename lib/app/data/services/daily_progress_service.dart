@@ -9,6 +9,12 @@ import '../models/firestore_daily_progress.dart';
 import 'firestore_service.dart';
 import 'quest_service.dart';
 import 'auth_service.dart';
+import '../../modules/home/controllers/home_stats_controller.dart'
+    as home_stats;
+import '../../modules/home/controllers/learning_tab_controller.dart'
+    as learning_tab;
+import '../../modules/community/controllers/community_controller.dart'
+    as community;
 
 const int _kDailyXpCap = 500;
 
@@ -80,6 +86,10 @@ class DailyProgressService extends GetxService {
       );
     }
 
+    if (update.appliedXp > 0) {
+      await _notifyXpEarned(userId, update.appliedXp);
+    }
+
     return update.appliedXp;
   }
 
@@ -112,6 +122,8 @@ class DailyProgressService extends GetxService {
         after: update.after,
       );
     }
+
+    // No XP awarded here, so nothing to notify.
   }
 
   Future<List<FirestoreDailyProgress>> getMonthlyProgress({
@@ -331,6 +343,33 @@ class DailyProgressService extends GetxService {
       );
     } catch (e) {
       debugPrint('Không thể tạo thông báo $type cho $userId: $e');
+    }
+  }
+
+  Future<void> _notifyXpEarned(String userId, int delta) async {
+    if (userId.isEmpty || delta <= 0) return;
+
+    // Update home stats/profile XP
+    if (Get.isRegistered<home_stats.HomeStatsController>()) {
+      try {
+        await Get.find<home_stats.HomeStatsController>().load();
+      } catch (_) {}
+    }
+
+    // Update home learning tab (targets/streak/quests)
+    if (Get.isRegistered<learning_tab.LearningTabController>()) {
+      try {
+        await Get.find<learning_tab.LearningTabController>().refreshProgress();
+      } catch (_) {}
+    }
+
+    // Update community leaderboard and group details
+    if (Get.isRegistered<community.CommunityController>()) {
+      try {
+        final controller = Get.find<community.CommunityController>();
+        await controller.refreshLeaderboard();
+        await controller.refreshCurrentGroupDetails();
+      } catch (_) {}
     }
   }
 

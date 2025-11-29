@@ -126,28 +126,23 @@ class ShopView extends GetView<ShopController> {
   }
 
   Widget _buildMyItems() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildMyItem(
-            'assets/images/XPx2.png',
-            'Vảy tăng tốc',
-            'x0',
-          ),
-          _buildMyItem(
-            'assets/images/streak/streakbang.png',
-            'Đá băng',
-            'x1',
-          ),
-          _buildMyItem(
-            'assets/images/binhcucquang.png',
-            'Bình cực quang',
-            'x0',
-          ),
-        ],
-      ),
-    );
+    return Obx(() {
+      final items = controller.myItems;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: items
+              .map(
+                (item) => _buildMyItem(
+                  item.imagePath,
+                  item.name,
+                  'x${item.quantity}',
+                ),
+              )
+              .toList(),
+        ),
+      );
+    });
   }
 
   Widget _buildMyItem(String imagePath, String title, String quantity) {

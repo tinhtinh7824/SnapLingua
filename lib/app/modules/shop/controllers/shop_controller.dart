@@ -4,11 +4,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_widgets.dart';
 import '../../../data/services/user_service.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/firestore_service.dart';
+import '../../../data/services/firestore_service.purchase_models.dart';
 
 class ShopController extends GetxController {
   // Dependencies with safe initialization
   UserService? _userService;
   AuthService? _authService;
+  FirestoreService? _firestoreService;
 
   @override
   void onInit() {
@@ -35,11 +38,19 @@ class ShopController extends GetxController {
     } catch (e) {
       Get.log('AuthService not available: $e');
     }
+
+    try {
+      if (Get.isRegistered<FirestoreService>()) {
+        _firestoreService = Get.find<FirestoreService>();
+      }
+    } catch (e) {
+      Get.log('FirestoreService not available: $e');
+    }
   }
 
   // Coins and gems balance
-  final coins = 160.obs;
-  final gems = 2.obs;
+  final coins = 0.obs;
+  final gems = 0.obs;
 
   // Loading states
   final isLoading = false.obs;
@@ -60,12 +71,25 @@ class ShopController extends GetxController {
           try {
             final profile = await _userService?.getUserProfile();
             if (profile != null) {
-              coins.value = profile['coins'] as int? ?? coins.value;
-              gems.value = profile['gems'] as int? ?? gems.value;
+              coins.value =
+                  profile['scalesBalance'] as int? ?? coins.value;
+              gems.value = profile['gemsBalance'] as int? ?? gems.value;
               Get.log('Loaded balance: ${coins.value} coins, ${gems.value} gems');
             }
           } catch (e) {
             Get.log('Could not load balance from UserService: $e');
+          }
+
+          // Fallback/refresh directly from Firestore
+          try {
+            final userDoc = await _firestoreService?.getUserById(userId);
+            if (userDoc != null) {
+              coins.value = userDoc.scalesBalance;
+              gems.value = userDoc.gemsBalance;
+              Get.log('Synced balance from Firestore: ${coins.value} vảy, ${gems.value} ngọc');
+            }
+          } catch (e) {
+            Get.log('Could not load balance from Firestore: $e');
           }
         }
       }
@@ -80,36 +104,30 @@ class ShopController extends GetxController {
   // Load user's inventory
   Future<void> loadUserInventory() async {
     try {
-      // For now, set some default inventory items
-      myItems.value = [
-        const ShopItem(
-          id: 'streak_freeze',
-          name: 'Đá băng',
-          description: 'Giữ chuỗi streak khi nghỉ 1 ngày',
-          imagePath: 'assets/images/streak/streakbang.png',
-          price: 200,
-          isCoins: true,
-          quantity: 1,
-        ),
-        const ShopItem(
-          id: 'xp_boost',
-          name: 'Vảy tăng tốc',
-          description: 'Nhận đôi XP trong 15 phút',
-          imagePath: 'assets/images/XPx2.png',
-          price: 150,
-          isCoins: true,
-          quantity: 0,
-        ),
-        const ShopItem(
-          id: 'super_boost',
-          name: 'Bình cực quang',
-          description: 'Tăng 25% XP toàn app trong 24 giờ',
-          imagePath: 'assets/images/binhcucquang.png',
-          price: 2,
-          isCoins: false,
-          quantity: 0,
-        ),
-      ];
+      final baseItems = _defaultItems();
+      if (_authService?.isLoggedIn == true && _firestoreService != null) {
+        final userId = _authService!.currentUserId;
+        // Ensure inventory docs exist so quantities persist even when 0.
+        await _firestoreService!.ensureUserInventoryInitialized(
+          userId: userId,
+          itemIds: baseItems.map((e) => e.id).toList(),
+        );
+        final inventory = await _firestoreService!.getUserInventory(
+          userId: userId,
+        );
+        final quantities = {
+          for (final item in inventory) item.itemId: item.quantity,
+        };
+        myItems.value = baseItems
+            .map(
+              (item) => item.copyWith(
+                quantity: quantities[item.id] ?? 0,
+              ),
+            )
+            .toList();
+      } else {
+        myItems.value = baseItems;
+      }
     } catch (e) {
       Get.log('Error loading inventory: $e');
     }
@@ -280,34 +298,47 @@ class ShopController extends GetxController {
     );
 
     if (result == true) {
-      purchaseItem(itemName, price, isCoins);
+      await purchaseItem(itemName, price, isCoins);
     }
   }
 
   // Purchase item
-  void purchaseItem(String itemName, int price, bool isCoins) {
-    if (!canPurchase(price, isCoins)) {
-      final needed = isCoins ? price - coins.value : price - gems.value;
-      final currency = isCoins ? 'vảy' : 'ngọc';
+  Future<void> purchaseItem(String itemName, int price, bool isCoins) async {
+    if (_authService?.isLoggedIn != true) {
       AppWidgets.showErrorDialog(
-        title: 'Không đủ tiền',
-        message: 'Bạn cần thêm $needed $currency để mua vật phẩm này',
+        title: 'Cần đăng nhập',
+        message: 'Vui lòng đăng nhập để mua vật phẩm.',
+      );
+      return;
+    }
+
+    final userId = _authService?.currentUserId;
+    final itemId = _getItemIdByName(itemName);
+    if (itemId == 'unknown' || userId == null) {
+      AppWidgets.showErrorDialog(
+        title: 'Không thể mua',
+        message: 'Vật phẩm không hợp lệ hoặc thiếu thông tin người dùng.',
       );
       return;
     }
 
     try {
-      // Deduct the cost
-      if (isCoins) {
-        coins.value -= price;
-      } else {
-        gems.value -= price;
-      }
+      final result = await _firestoreService?.purchaseShopItem(
+        userId: userId,
+        itemId: itemId,
+        price: price,
+        isCoins: isCoins,
+      );
 
-      // Add item to inventory if it exists
-      final existingItem = getInventoryItem(_getItemIdByName(itemName));
-      if (existingItem != null) {
-        updateItemQuantity(existingItem.id, existingItem.quantity + 1);
+      if (result != null) {
+        coins.value = result.newScalesBalance;
+        gems.value = result.newGemsBalance;
+
+        // Add item to inventory if it exists
+        final existingItem = getInventoryItem(itemId);
+        if (existingItem != null) {
+          updateItemQuantity(existingItem.id, result.newQuantity);
+        }
       }
 
       // Show success message
@@ -321,6 +352,13 @@ class ShopController extends GetxController {
       );
 
       Get.log('Successfully purchased: $itemName for $price ${isCoins ? 'coins' : 'gems'}');
+    } on InsufficientFundsException catch (e) {
+      final needed = isCoins ? price - coins.value : price - gems.value;
+      AppWidgets.showErrorDialog(
+        title: 'Không đủ tiền',
+        message:
+            'Bạn cần thêm ${needed > 0 ? needed : e.requiredAmount - e.availableAmount} ${e.currency} để mua vật phẩm này',
+      );
     } catch (e) {
       Get.log('Error during purchase: $e');
       AppWidgets.showErrorDialog(
@@ -339,6 +377,12 @@ class ShopController extends GetxController {
         return 'xp_boost';
       case 'Bình cực quang':
         return 'super_boost';
+      case 'Sticker OK':
+        return 'sticker_ok';
+      case 'Sticker yêu ngất ngây':
+        return 'sticker_love';
+      case 'Sticker buồn hiu':
+        return 'sticker_sad';
       default:
         return 'unknown';
     }
@@ -361,6 +405,59 @@ class ShopController extends GetxController {
     await loadUserBalance();
     await loadUserInventory();
     isLoading.value = false;
+  }
+
+  List<ShopItem> _defaultItems() {
+    return const [
+      ShopItem(
+        id: 'streak_freeze',
+        name: 'Đá băng',
+        description: 'Giữ chuỗi streak khi nghỉ 1 ngày',
+        imagePath: 'assets/images/streak/streakbang.png',
+        price: 200,
+        isCoins: true,
+      ),
+      ShopItem(
+        id: 'xp_boost',
+        name: 'Vảy tăng tốc',
+        description: 'Nhận đôi XP trong 15 phút',
+        imagePath: 'assets/images/XPx2.png',
+        price: 150,
+        isCoins: true,
+      ),
+      ShopItem(
+        id: 'super_boost',
+        name: 'Bình cực quang',
+        description: 'Tăng 25% XP toàn app trong 24 giờ',
+        imagePath: 'assets/images/binhcucquang.png',
+        price: 2,
+        isCoins: false,
+      ),
+      ShopItem(
+        id: 'sticker_ok',
+        name: 'Sticker OK',
+        description: 'Dùng sticker trong chat nhóm & bình luận',
+        imagePath: 'assets/images/chimcanhcut/chim_ok.png',
+        price: 2,
+        isCoins: false,
+      ),
+      ShopItem(
+        id: 'sticker_love',
+        name: 'Sticker yêu ngất ngây',
+        description: 'Dùng sticker trong chat nhóm & bình luận',
+        imagePath: 'assets/images/chimcanhcut/chim_yeu.png',
+        price: 2,
+        isCoins: false,
+      ),
+      ShopItem(
+        id: 'sticker_sad',
+        name: 'Sticker buồn hiu',
+        description: 'Dùng sticker trong chat nhóm & bình luận',
+        imagePath: 'assets/images/chimcanhcut/chim_buon.png',
+        price: 2,
+        isCoins: false,
+      ),
+    ];
   }
 }
 

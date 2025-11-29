@@ -668,8 +668,10 @@ class ReviewView extends GetView<ReviewController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8.w,
+                        runSpacing: 4.h,
                         children: [
                           Text(
                             item.word,
@@ -679,7 +681,6 @@ class ReviewView extends GetView<ReviewController> {
                               color: const Color(0xFF023047),
                             ),
                           ),
-                          SizedBox(width: 8.w),
                           Text(
                             item.ipa,
                             style: AppTextStyles.captionMedium.copyWith(
@@ -687,8 +688,9 @@ class ReviewView extends GetView<ReviewController> {
                               color: const Color(0xFF0096C7),
                               fontWeight: FontWeight.w600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(width: 8.w),
                           GestureDetector(
                             onTap: () => controller.speakWord(item.word),
                             child: Icon(

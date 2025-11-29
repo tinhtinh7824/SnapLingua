@@ -16,6 +16,7 @@ class HomeView extends GetView<HomeController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false, // giữ FAB cố định khi mở bàn phím
       body: Obx(() {
         switch (controller.currentIndex) {
           case 0:

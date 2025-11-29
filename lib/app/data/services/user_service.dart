@@ -41,6 +41,8 @@ class UserService extends GetxService {
         'avatarUrl': user.avatarUrl,
         'role': user.role,
         'status': user.status,
+        'scalesBalance': user.scalesBalance,
+        'gemsBalance': user.gemsBalance,
         'createdAt': user.createdAt,
         'updatedAt': user.updatedAt,
       };

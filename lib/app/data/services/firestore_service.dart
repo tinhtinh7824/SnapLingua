@@ -379,6 +379,27 @@ class FirestoreService extends GetxService {
     );
   }
 
+  /// Ensure inventory documents exist for provided itemIds (quantity defaults to 0).
+  Future<void> ensureUserInventoryInitialized({
+    required String userId,
+    required List<String> itemIds,
+  }) async {
+    if (userId.isEmpty || itemIds.isEmpty) return;
+    for (final itemId in itemIds) {
+      final docId = '${userId}_$itemId';
+      final docRef = _userInventory.doc(docId);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        await docRef.set({
+          'user_id': userId,
+          'item_id': itemId,
+          'quantity': 0,
+          'created_at': Timestamp.fromDate(DateTime.now()),
+        });
+      }
+    }
+  }
+
   Future<void> createNotification({
     required String userId,
     required String type,
@@ -393,6 +414,54 @@ class FirestoreService extends GetxService {
       readAt: null,
     );
     await _notifications.add(notification.toMap());
+  }
+
+  Future<List<FirestoreNotification>> getUserNotifications({
+    required String userId,
+    int limit = 50,
+  }) async {
+    if (userId.isEmpty) return [];
+    final snapshot = await _notifications
+        .where('user_id', isEqualTo: userId)
+        .orderBy('sent_at', descending: true)
+        .limit(limit)
+        .get();
+    return snapshot.docs
+        .map(FirestoreNotification.fromSnapshot)
+        .toList();
+  }
+
+  Future<void> markNotificationRead({
+    required String notificationId,
+  }) async {
+    if (notificationId.isEmpty) return;
+    await _notifications.doc(notificationId).set(
+      {
+        'read_at': Timestamp.fromDate(DateTime.now()),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> markAllNotificationsRead({
+    required String userId,
+    int batchSize = 300,
+  }) async {
+    if (userId.isEmpty) return;
+    final unreadQuery = await _notifications
+        .where('user_id', isEqualTo: userId)
+        .where('read_at', isNull: true)
+        .limit(batchSize)
+        .get();
+
+    if (unreadQuery.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    final now = Timestamp.fromDate(DateTime.now());
+    for (final doc in unreadQuery.docs) {
+      batch.update(doc.reference, {'read_at': now});
+    }
+    await batch.commit();
   }
 
   Future<FirestoreNotificationSettings?> getNotificationSettings(
@@ -459,6 +528,18 @@ class FirestoreService extends GetxService {
     if (userId.isEmpty || targetUserId.isEmpty) return;
     final docId = '${targetUserId}_$userId';
     await _follows.doc(docId).delete();
+  }
+
+  Future<bool> isFollowingUser({
+    required String userId,
+    required String targetUserId,
+  }) async {
+    if (userId.isEmpty || targetUserId.isEmpty || userId == targetUserId) {
+      return false;
+    }
+    final docId = '${targetUserId}_$userId';
+    final doc = await _follows.doc(docId).get();
+    return doc.exists && doc.data() != null;
   }
 
   Future<List<String>> getCommunityPostImagesByUser({
@@ -716,6 +797,14 @@ class FirestoreService extends GetxService {
             snapshot.docs.map(FirestoreLeagueCycle.fromSnapshot).toList());
   }
 
+  Future<List<FirestoreLeagueMember>> getLeagueMembers({
+    required String cycleId,
+  }) async {
+    final snapshot =
+        await _leagueMembers.where('cycle_id', isEqualTo: cycleId).get();
+    return snapshot.docs.map(FirestoreLeagueMember.fromSnapshot).toList();
+  }
+
   Stream<List<FirestorePost>> listenToCommunityPosts({
     String? visibility,
     String? status,
@@ -783,7 +872,7 @@ class FirestoreService extends GetxService {
   }) {
     return _groupMembers
         .where('user_id', isEqualTo: userId)
-        .where('status', isEqualTo: 'accepted')
+        .where('status', whereIn: ['active', 'accepted'])
         .snapshots()
         .map((snapshot) =>
             snapshot.docs.map(FirestoreGroupMember.fromSnapshot).toList());
@@ -995,6 +1084,48 @@ class FirestoreService extends GetxService {
     }
 
     await _firestore.collection('post_reports').add(data);
+  }
+
+  Future<List<String>> getUserReportedPostIds(String userId) async {
+    if (userId.isEmpty) return <String>[];
+    final snapshot = await _firestore
+        .collection('post_reports')
+        .where('reported_by', isEqualTo: userId)
+        .get();
+    return snapshot.docs
+        .map((doc) => (doc.data()['post_id'] as String?) ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> deletePostCascade(String postId) async {
+    if (postId.isEmpty) return;
+
+    Future<void> _deleteWhere(
+      CollectionReference<Map<String, dynamic>> col,
+      String field,
+    ) async {
+      final snap = await col.where(field, isEqualTo: postId).get();
+      for (final doc in snap.docs) {
+        await doc.reference.delete();
+      }
+    }
+
+    await Future.wait([
+      _deleteWhere(_postLikes, 'post_id'),
+      _deleteWhere(_postComments, 'post_id'),
+      _deleteWhere(_postWords, 'post_id'),
+      _deleteWhere(_firestore.collection('post_reports'), 'post_id'),
+    ]);
+
+    await _posts.doc(postId).delete();
+  }
+
+  Future<FirestorePost?> getPostById(String postId) async {
+    if (postId.isEmpty) return null;
+    final doc = await _posts.doc(postId).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return FirestorePost.fromSnapshot(doc);
   }
 
   // Update method to include optional requestMessage parameter

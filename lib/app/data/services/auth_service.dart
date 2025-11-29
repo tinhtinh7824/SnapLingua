@@ -8,6 +8,18 @@ import 'package:get_storage/get_storage.dart';
 
 import 'realm_service.dart';
 import 'firestore_service.dart';
+import 'service_binding.dart';
+import 'survey_service.dart';
+import 'user_service.dart';
+import 'vocabulary_service.dart';
+import 'lesson_service.dart';
+import 'gamification_service.dart';
+import 'community_service.dart';
+import 'camera_service.dart';
+import 'daily_progress_service.dart';
+import 'goal_service.dart';
+import 'notification_settings_service.dart';
+import 'push_notification_service.dart';
 
 class AuthService extends GetxService {
   static AuthService get to => Get.find();
@@ -103,6 +115,7 @@ class AuthService extends GetxService {
       );
 
       await _saveAuthState(userId, email);
+      await _reinitializeUserScopedServices();
 
       return {'success': true, 'message': 'Đăng ký thành công'};
     } catch (e) {
@@ -151,6 +164,7 @@ class AuthService extends GetxService {
       }
 
       await _saveAuthState(userId, email);
+      await _reinitializeUserScopedServices();
 
       return {'success': true, 'message': 'Đăng nhập thành công'};
     } catch (e) {
@@ -164,6 +178,7 @@ class AuthService extends GetxService {
       await _firebaseAuth.signOut();
       await _realmService.logout();
       await _clearAuthState();
+      await _resetUserScopedServices();
     } catch (e) {
       print('Logout error: $e');
     }
@@ -322,6 +337,32 @@ class AuthService extends GetxService {
     final bytes = utf8.encode(password);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  Future<void> _reinitializeUserScopedServices() async {
+    await _resetUserScopedServices();
+    // Re-register services so controllers pick up a fresh instance for the current user.
+    ServiceBinding().dependencies();
+  }
+
+  Future<void> _resetUserScopedServices() async {
+    await _safeDelete<UserService>();
+    await _safeDelete<SurveyService>();
+    await _safeDelete<VocabularyService>();
+    await _safeDelete<LessonService>();
+    await _safeDelete<GamificationService>();
+    await _safeDelete<CommunityService>();
+    await _safeDelete<CameraService>();
+    await _safeDelete<DailyProgressService>();
+    await _safeDelete<GoalService>();
+    await _safeDelete<NotificationSettingsService>();
+    await _safeDelete<PushNotificationService>();
+  }
+
+  Future<void> _safeDelete<T>() async {
+    if (Get.isRegistered<T>()) {
+      await Get.delete<T>(force: true);
+    }
   }
 
   String _friendlyFirebaseError(Object e) {

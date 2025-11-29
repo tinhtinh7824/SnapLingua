@@ -51,6 +51,8 @@ import '../modules/community_detail/bindings/community_detail_binding.dart';
 import '../modules/community_detail/views/community_detail_view.dart';
 import '../modules/community_chat/bindings/community_chat_binding.dart';
 import '../modules/community_chat/views/community_chat_view.dart';
+import '../modules/community_create_group/bindings/community_create_group_binding.dart';
+import '../modules/community_create_group/views/community_create_group_view.dart';
 import '../modules/add_vocabulary_category/bindings/add_vocabulary_category_binding.dart';
 import '../modules/add_vocabulary_category/views/add_vocabulary_category_view.dart';
 import '../modules/learning_session/bindings/learning_session_binding.dart';
@@ -175,6 +177,11 @@ class AppPages {
       name: _Paths.communityChat,
       page: () => const CommunityChatView(),
       binding: CommunityChatBinding(),
+    ),
+    GetPage(
+      name: _Paths.communityCreateGroup,
+      page: () => const CommunityCreateGroupView(),
+      binding: CommunityCreateGroupBinding(),
     ),
     GetPage(
       name: _Paths.addVocabularyCategory,

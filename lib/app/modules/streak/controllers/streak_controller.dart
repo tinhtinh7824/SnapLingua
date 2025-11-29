@@ -1,83 +1,64 @@
 import 'package:get/get.dart';
 
+import '../../../data/models/firestore_daily_progress.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/daily_progress_service.dart';
+
 class StreakController extends GetxController {
-  // Current streak count
-  final currentStreak = 15.obs;
+  StreakController({
+    AuthService? authService,
+    DailyProgressService? dailyProgressService,
+  })  : _authService = authService ?? _resolveAuthService(),
+        _dailyProgressService =
+            dailyProgressService ?? _resolveDailyProgressService();
 
-  // Total study days in current month
-  final studyDaysInMonth = 15.obs;
+  final AuthService _authService;
+  final DailyProgressService _dailyProgressService;
 
-  // Freeze items used
-  final freezeItemsUsed = 5.obs;
-
-  // Current selected month/year
+  final currentStreak = 0.obs;
+  final studyDaysInMonth = 0.obs;
+  final freezeItemsUsed = 0.obs;
   final currentMonth = DateTime.now().obs;
-
-  // Days that user has studied (sample data)
   final studiedDays = <DateTime>[].obs;
-
-  // Loading state
   final isLoading = false.obs;
-
-  // Today's activity status
   final todayHasActivity = false.obs;
+  final errorMessage = ''.obs;
 
   @override
   void onInit() {
     super.onInit();
-    _initializeStreakData();
-    _updateTodayActivity();
+    refreshStreakData();
   }
 
-  void _initializeStreakData() {
-    // Sample data: User studied on these days in August 2025
-    const year = 2025;
-    const month = 8;
-
-    // Days with streak (orange)
-    final studyDaysList = [
-      1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 14, 16, 18, 19, 20, 21, 22, 23, 25, 26
-    ];
-
-    studiedDays.value = studyDaysList
-        .map((day) => DateTime(year, month, day))
-        .toList();
-    _updateTodayActivity();
+  Future<void> refreshStreakData() async {
+    await _loadDataForMonth(currentMonth.value, refreshStreak: true);
   }
 
-  // Update today's activity status
-  void _updateTodayActivity() {
-    final today = DateTime.now();
-    todayHasActivity.value = isDayStudied(today);
-  }
-
-  // Navigate to previous month
-  void previousMonth() {
-    currentMonth.value = DateTime(
+  Future<void> previousMonth() async {
+    final prev = DateTime(
       currentMonth.value.year,
       currentMonth.value.month - 1,
     );
-    _updateMonthlyStatistics();
+    await _loadDataForMonth(prev);
   }
 
-  // Navigate to next month
-  void nextMonth() {
-    currentMonth.value = DateTime(
+  Future<void> nextMonth() async {
+    final next = DateTime(
       currentMonth.value.year,
       currentMonth.value.month + 1,
     );
-    _updateMonthlyStatistics();
+    await _loadDataForMonth(next);
   }
 
-  // Check if a day has been studied
   bool isDayStudied(DateTime day) {
-    return studiedDays.any((studiedDay) =>
-        studiedDay.year == day.year &&
-        studiedDay.month == day.month &&
-        studiedDay.day == day.day);
+    return studiedDays.any(
+      (studiedDay) =>
+          studiedDay.year == day.year &&
+          studiedDay.month == day.month &&
+          studiedDay.day == day.day,
+    );
   }
 
-  // Check if it's today
   bool isToday(DateTime day) {
     final now = DateTime.now();
     return day.year == now.year &&
@@ -85,33 +66,11 @@ class StreakController extends GetxController {
         day.day == now.day;
   }
 
-  // Check if it's current month
   bool isCurrentMonth(DateTime day) {
     return day.month == currentMonth.value.month &&
         day.year == currentMonth.value.year;
   }
 
-  // Refresh streak data
-  Future<void> refreshStreakData() async {
-    try {
-      isLoading.value = true;
-
-      // Simulate data loading
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Recalculate statistics for current month
-      _updateMonthlyStatistics();
-      _updateTodayActivity();
-
-      Get.log('Streak data refreshed successfully');
-    } catch (e) {
-      Get.log('Error refreshing streak data: $e');
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  // Get motivational message based on current streak
   String getMotivationalMessage() {
     final streak = currentStreak.value;
 
@@ -128,7 +87,6 @@ class StreakController extends GetxController {
     }
   }
 
-  // Get streak status message
   String getStreakMessage() {
     final streak = currentStreak.value;
 
@@ -143,49 +101,102 @@ class StreakController extends GetxController {
     }
   }
 
-  // Update monthly statistics when month changes
-  void _updateMonthlyStatistics() {
-    final month = currentMonth.value;
+  Future<void> _loadDataForMonth(
+    DateTime month, {
+    bool refreshStreak = false,
+  }) async {
+    isLoading.value = true;
+    errorMessage.value = '';
 
-    // Count study days in current month
-    int studyDaysCount = 0;
-    for (final studiedDay in studiedDays) {
-      if (studiedDay.year == month.year && studiedDay.month == month.month) {
-        studyDaysCount++;
+    try {
+      final userId = _resolveUserId();
+      if (userId.isEmpty || userId == 'guest') {
+        errorMessage.value = 'Bạn cần đăng nhập để xem streak.';
+        _resetData();
+        return;
       }
+
+      final normalizedMonth = DateTime(month.year, month.month);
+      currentMonth.value = normalizedMonth;
+
+      List<FirestoreDailyProgress> monthly;
+      final cached = _dailyProgressService.getCachedMonthlyProgress(
+        userId: userId,
+        month: normalizedMonth,
+      );
+
+      if (cached != null) {
+        monthly = cached;
+      } else {
+        monthly = await _dailyProgressService.getMonthlyProgress(
+          userId: userId,
+          month: normalizedMonth,
+        );
+      }
+
+      final activeDays = monthly
+          .where(_hasActivity)
+          .map(
+            (p) => DateTime(p.date.year, p.date.month, p.date.day),
+          )
+          .toList();
+      activeDays.sort((a, b) => a.compareTo(b));
+      studiedDays.assignAll(activeDays);
+      studyDaysInMonth.value = activeDays.length;
+
+      todayHasActivity.value = await _dailyProgressService.hasActivityOnDate(
+        userId: userId,
+        date: DateTime.now(),
+      );
+
+      if (refreshStreak) {
+        currentStreak.value =
+            await _dailyProgressService.calculateStreak(userId: userId);
+      }
+
+      freezeItemsUsed.value = 0;
+    } catch (e) {
+      errorMessage.value = 'Không thể tải dữ liệu streak: $e';
+    } finally {
+      isLoading.value = false;
     }
-
-    studyDaysInMonth.value = studyDaysCount;
-
-    // Update freeze items used (placeholder logic)
-    freezeItemsUsed.value = (studyDaysCount * 0.2).round();
   }
 
+  void _resetData() {
+    currentStreak.value = 0;
+    studyDaysInMonth.value = 0;
+    studiedDays.clear();
+    todayHasActivity.value = false;
+    freezeItemsUsed.value = 0;
+  }
 
-  // Add a study day (for future enhancement)
-  void addStudyDay(DateTime date) {
-    if (!isDayStudied(date)) {
-      studiedDays.add(date);
-      studiedDays.refresh();
-      _updateMonthlyStatistics();
-      _updateTodayActivity();
-
-      // Update current streak if it's today
-      if (isToday(date)) {
-        currentStreak.value += 1;
-      }
+  String _resolveUserId() {
+    try {
+      return _authService.currentUserId;
+    } catch (_) {
+      return '';
     }
   }
 
-  // Remove a study day (for future enhancement)
-  void removeStudyDay(DateTime date) {
-    studiedDays.removeWhere((day) =>
-      day.year == date.year &&
-      day.month == date.month &&
-      day.day == date.day
-    );
-    studiedDays.refresh();
-    _updateMonthlyStatistics();
-    _updateTodayActivity();
+  static bool _hasActivity(FirestoreDailyProgress progress) {
+    return progress.xpGained > 0 ||
+        progress.newLearned > 0 ||
+        progress.reviewDone > 0 ||
+        progress.reviewDue > 0 ||
+        progress.newTarget > 0;
+  }
+
+  static AuthService _resolveAuthService() {
+    if (Get.isRegistered<AuthService>()) {
+      return AuthService.to;
+    }
+    return Get.put(AuthService());
+  }
+
+  static DailyProgressService _resolveDailyProgressService() {
+    if (Get.isRegistered<DailyProgressService>()) {
+      return DailyProgressService.to;
+    }
+    return Get.put(DailyProgressService());
   }
 }

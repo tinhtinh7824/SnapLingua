@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
+import 'package:snaplingua/app/modules/community/controllers/community_controller.dart';
+import 'package:snaplingua/app/modules/home/controllers/home_stats_controller.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../data/models/firestore_personal_word.dart';
@@ -526,6 +528,22 @@ class LearningSessionController extends GetxController {
 
       if (appliedXp > 0) {
         _xpEarned += appliedXp;
+        // Notify other controllers to refresh XP-dependent UI immediately.
+        if (Get.isRegistered<HomeStatsController>()) {
+          try {
+            await Get.find<HomeStatsController>().load();
+          } catch (_) {}
+        }
+        if (Get.isRegistered<LearningTabController>()) {
+          try {
+            await Get.find<LearningTabController>().refreshProgress();
+          } catch (_) {}
+        }
+        if (Get.isRegistered<CommunityController>()) {
+          try {
+            await Get.find<CommunityController>().refreshLeaderboard();
+          } catch (_) {}
+        }
       }
     } catch (_) {}
   }
@@ -561,9 +579,9 @@ class LearningSessionController extends GetxController {
     for (final result in summary.results) {
       final word = result.word;
       final personalId = word.personalWordId;
-      if (personalId == null || personalId.isEmpty) {
-        continue;
-      }
+      final sessionWordId = (personalId == null || personalId.isEmpty)
+          ? word.vocabularyId
+          : personalId;
 
       final isFirstCorrect = result.firstTryCorrect == true;
       final baseStage = word.srsStage.clamp(0, 6); // Ensure stage is valid
@@ -579,6 +597,7 @@ class LearningSessionController extends GetxController {
       String newStatus;
 
       if (isFirstCorrect) {
+        _scalesEarned += 1;
         newStage = (baseStage + 1).clamp(0, intervals.length - 1);
         intervalDays = intervals[newStage];
         newWrong = 0;
@@ -586,7 +605,6 @@ class LearningSessionController extends GetxController {
         newStatus = newStage >= 2
             ? FirestorePersonalWordStatus.mastered
             : FirestorePersonalWordStatus.learning;
-        _scalesEarned += 1;
       } else {
         newStage = 0;
         intervalDays = intervals.first;
@@ -597,26 +615,28 @@ class LearningSessionController extends GetxController {
 
       final dueAt = now.add(Duration(days: intervalDays));
 
-      updates.add(
-        PersonalWordSrsUpdate(
-          personalWordId: personalId,
-          status: newStatus,
-          srsStage: newStage,
-          srsEase: baseEase,
-          srsIntervalDays: intervalDays,
-          srsDueAt: dueAt,
-          repetitions: baseRepetitions + 1,
-          wrongStreak: newWrong,
-          forgetCount: newLapses,
-          lastReviewedAt: now,
-        ),
-      );
+      if (personalId != null && personalId.isNotEmpty) {
+        updates.add(
+          PersonalWordSrsUpdate(
+            personalWordId: personalId,
+            status: newStatus,
+            srsStage: newStage,
+            srsEase: baseEase,
+            srsIntervalDays: intervalDays,
+            srsDueAt: dueAt,
+            repetitions: baseRepetitions + 1,
+            wrongStreak: newWrong,
+            forgetCount: newLapses,
+            lastReviewedAt: now,
+          ),
+        );
+      }
 
       sessionItems.add(
         FirestoreSessionItem(
           itemId: _uuid.v4(),
           sessionId: sessionId,
-          personalWordId: personalId,
+          personalWordId: sessionWordId,
           round: LearningSessionController.roundFinalCheck,
           questionType: result.questionTypes.isNotEmpty
               ? result.questionTypes.first

@@ -7,6 +7,7 @@ import '../../../routes/app_pages.dart';
 import '../../camera_detection/controllers/camera_detection_controller.dart';
 import '../../review/controllers/review_controller.dart';
 import '../controllers/home_stats_controller.dart';
+import '../../../core/utils/streak_asset_resolver.dart';
 import '../../../data/models/firestore_user.dart';
 import '../../../data/models/firestore_daily_quest.dart';
 import '../../../data/models/firestore_monthly_quest.dart';
@@ -69,11 +70,12 @@ class LearningTabView extends GetView<HomeStatsController> {
     String? title,
     String? imagePath,
     double? devicePixelRatio,
+    VoidCallback? onTap,
   }) {
     final safeTotal = total <= 0 ? 1 : total;
     final safeCurrent = current.clamp(0, safeTotal);
     final percentage = ((safeCurrent / safeTotal) * 100).round();
-    return Row(
+    final content = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
@@ -137,6 +139,13 @@ class LearningTabView extends GetView<HomeStatsController> {
           ),
         ],
       ],
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: content,
     );
   }
 
@@ -366,7 +375,13 @@ class LearningTabView extends GetView<HomeStatsController> {
           children: [
           _buildStatItem('assets/images/vay.png', '$scales', const Color(0xFFB8C3D1), Routes.shop, devicePixelRatio),
           _buildStatItem('assets/images/ngoc.png', '$gems', const Color(0xFF0571E6), Routes.shop, devicePixelRatio),
-          _buildStatItem('assets/images/streak/streak6.png', '$streak', const Color(0xFF4E67F8), Routes.streak, devicePixelRatio),
+          _buildStatItem(
+            StreakAssetResolver.assetByValue(streak),
+            '$streak',
+            const Color(0xFF4E67F8),
+            Routes.streak,
+            devicePixelRatio,
+          ),
           Stack(
             children: [
               _buildStatItem('assets/images/thongbao.png', '', Colors.black, Routes.notification, devicePixelRatio),
@@ -775,7 +790,32 @@ class LearningTabView extends GetView<HomeStatsController> {
           SizedBox(height: 16.h),
           ...List.generate(quests.length, (index) {
             final quest = quests[index];
-            final imagePath = 'assets/images/chimcanhcut/chim_camqua.png';
+            final bool completed = quest.completed;
+            final bool claimed = quest.rewardClaimed;
+            final imagePath = !completed
+                ? 'assets/images/chimcanhcut/chim_thoibong.png'
+                : claimed
+                    ? 'assets/images/chimcanhcut/chim_moqua.png'
+                    : 'assets/images/chimcanhcut/chim_camqua.png';
+
+            VoidCallback? onTap;
+            if (completed && !claimed) {
+              onTap = () async {
+                if (!Get.isRegistered<QuestService>()) return;
+                await QuestService.to.claimDailyQuest(quest.type);
+                await QuestService.to.refreshQuests();
+                if (Get.isRegistered<LearningTabController>()) {
+                  await Get.find<LearningTabController>().refreshProgress();
+                }
+                Get.snackbar(
+                  'Nhận thưởng',
+                  '+15 vảy đã được cộng vào tài khoản của bạn.',
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: const Duration(seconds: 2),
+                );
+              };
+            }
+
             return Padding(
               padding: EdgeInsets.only(bottom: index == quests.length - 1 ? 0 : 16.h),
               child: _buildQuestProgressBar(
@@ -784,6 +824,7 @@ class LearningTabView extends GetView<HomeStatsController> {
                 title: questTitleForType(quest.type),
                 imagePath: imagePath,
                 devicePixelRatio: devicePixelRatio,
+                onTap: onTap,
               ),
             );
           }),

@@ -26,6 +26,7 @@ abstract class Routes {
   static const communityDetail = _Paths.communityDetail;
   static const communityChat = _Paths.communityChat;
   static const communityMemberProfile = _Paths.communityMemberProfile;
+  static const communityCreateGroup = _Paths.communityCreateGroup;
   static const vocabularyList = _Paths.vocabularyList;
   static const vocabularyTopic = _Paths.vocabularyTopic;
   static const vocabularyFlashcard = _Paths.vocabularyFlashcard;
@@ -61,6 +62,7 @@ abstract class _Paths {
   static const communityDetail = '/community/detail';
   static const communityChat = '/community/chat';
   static const communityMemberProfile = '/community/member-profile';
+  static const communityCreateGroup = '/community/create-group';
   static const vocabularyList = '/vocabulary-list';
   static const vocabularyTopic = '/vocabulary-topic';
   static const vocabularyFlashcard = '/vocabulary-flashcard';

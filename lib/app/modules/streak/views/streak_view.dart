@@ -29,25 +29,58 @@ class StreakView extends GetView<StreakController> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(20.w),
-          child: Column(
-            children: [
-              _buildStreakHeader(),
-              SizedBox(height: 16.h),
+      body: Obx(() {
+        if (controller.isLoading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-              _buildMonthNavigation(),
-              SizedBox(height: 12.h),
+        if (controller.errorMessage.value.isNotEmpty) {
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24.w),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    controller.errorMessage.value,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16.sp,
+                      color: const Color(0xFF1B2B40),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  ElevatedButton(
+                    onPressed: controller.refreshStreakData,
+                    child: const Text('Thử lại'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
 
-              _buildStatisticsCards(),
-              SizedBox(height: 12.h),
+        return SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(20.w),
+            child: Column(
+              children: [
+                _buildStreakHeader(),
+                SizedBox(height: 16.h),
 
-              _buildCalendar(),
-            ],
+                _buildMonthNavigation(),
+                SizedBox(height: 12.h),
+
+                _buildStatisticsCards(),
+                SizedBox(height: 12.h),
+
+                _buildCalendar(),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 
@@ -178,6 +211,7 @@ class StreakView extends GetView<StreakController> {
                 controller.freezeItemsUsed.value.toString(),
                 'số đá băng\nđã dùng',
                 const Color(0xFF1CB0F6),
+                imageSize: 65.w,
               ),
             ),
           ],
@@ -185,7 +219,12 @@ class StreakView extends GetView<StreakController> {
   }
 
   Widget _buildStatCard(
-      String iconPath, String number, String label, Color borderColor) {
+    String iconPath,
+    String number,
+    String label,
+    Color borderColor, {
+    double? imageSize,
+  }) {
     return Container(
       padding: EdgeInsets.all(6.w),
       decoration: AppWidgets.questGradientDecoration(),
@@ -193,8 +232,8 @@ class StreakView extends GetView<StreakController> {
         children: [
           Image.asset(
             iconPath,
-            width: 85.w,
-            height: 85.h,
+            width: imageSize ?? 85.w,
+            height: imageSize ?? 85.h,
             errorBuilder: (context, error, stackTrace) {
               return Icon(Icons.local_fire_department, size: 50.sp);
             },

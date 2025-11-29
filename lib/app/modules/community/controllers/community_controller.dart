@@ -26,6 +26,7 @@ import 'package:snaplingua/app/data/models/firestore_league_tier.dart';
 import 'package:snaplingua/app/data/models/firestore_daily_quest.dart';
 import 'package:snaplingua/app/data/services/quest_service.dart';
 import '../../community_chat/models/community_chat_models.dart' as chat_models;
+import 'package:get_storage/get_storage.dart';
 
 import '../../community_member_profile/controllers/community_member_profile_controller.dart';
 import '../../profile/controllers/profile_controller.dart';
@@ -594,6 +595,7 @@ class CommunityController extends GetxController {
   final TextEditingController groupSearchController = TextEditingController();
   final RxList<CommunityJoinRequest> pendingJoinRequests =
       <CommunityJoinRequest>[].obs;
+  final GetStorage _storage = GetStorage();
   // Incoming join requests for groups the current user leads
   final RxList<CommunityJoinRequest> incomingJoinRequests =
     <CommunityJoinRequest>[].obs;
@@ -602,6 +604,9 @@ class CommunityController extends GetxController {
   late final Rx<CommunityLeagueInfo> currentLeague;
   final RxList<CommunityPostReport> submittedReports =
       <CommunityPostReport>[].obs;
+  final RxSet<String> hiddenPostIds = <String>{}.obs;
+  List<CommunityPost> _postCache = <CommunityPost>[];
+  static const String _followStorageKey = 'community_following_ids';
 
   static const String _fallbackUserId = 'current_user_id';
   static const List<String> _defaultTopics = [
@@ -634,6 +639,7 @@ class CommunityController extends GetxController {
     super.onInit();
     _initTts();
     _bindPosts();
+    _loadUserReportedPosts();
     _bindGroups();
     _bindUserMemberships();
     currentLeague = Rx<CommunityLeagueInfo>(CommunityLeagueInfo.empty());
@@ -769,7 +775,8 @@ class CommunityController extends GetxController {
         final mapped = await Future.wait(
           postList.map(_buildCommunityPost),
         );
-        posts.assignAll(mapped);
+        _postCache = mapped;
+        posts.assignAll(_filterHiddenPosts(mapped));
       } catch (e) {
         Get.log('Không thể chuyển đổi bài viết cộng đồng: $e');
       }
@@ -1053,6 +1060,18 @@ class CommunityController extends GetxController {
         );
   }
 
+  Future<void> refreshLeaderboard() async {
+    final cycle = activeLeagueCycle.value;
+    if (cycle == null) return;
+    try {
+      final members =
+          await _firestoreService.getLeagueMembers(cycleId: cycle.cycleId);
+      _mapLeagueMembers(members);
+    } catch (e) {
+      Get.log('Không thể làm mới bảng xếp hạng: $e');
+    }
+  }
+
   void _mapLeagueMembers(List<FirestoreLeagueMember> members) {
     Future<void>(() async {
       final tier = selectedLeagueTier.value;
@@ -1077,6 +1096,27 @@ class CommunityController extends GetxController {
             .where((participant) => participant != null)
             .cast<_LeagueParticipantData>()
             .toList();
+
+        // Ensure current user is included; create a placeholder entry if missing.
+        final String currentUserId = _resolveUserId();
+        final bool hasCurrentUser = rawParticipants.any(
+          (p) => p.member.userId == currentUserId,
+        );
+        if (!hasCurrentUser && currentUserId != _fallbackUserId) {
+          final placeholderMember = FirestoreLeagueMember(
+            id: 'local_$currentUserId',
+            cycleId: cycle.cycleId,
+            userId: currentUserId,
+            weeklyXp: 0,
+            rank: null,
+            isVirtual: false,
+          );
+          final placeholderData =
+              await _buildParticipantData(placeholderMember, cycle, ruleSet);
+          if (placeholderData != null) {
+            rawParticipants.add(placeholderData);
+          }
+        }
 
       } catch (e) {
         Get.log('Error mapping league members: $e');
@@ -1970,6 +2010,27 @@ class CommunityController extends GetxController {
     return null;
   }
 
+  Future<void> _loadGroupDetails(String groupId) async {
+    if (groupId.isEmpty) return;
+    CommunityStudyGroup? group = _findGroupById(groupId);
+    if (group == null) {
+      final fetched = await _firestoreService.getGroupById(groupId);
+      if (fetched != null) {
+        group = await _buildCommunityGroup(fetched);
+        studyGroups.add(group);
+      }
+    }
+    if (group != null) {
+      joinedGroupDetails.value = await _buildGroupDetailsFromFirestore(group);
+    }
+  }
+
+  Future<void> refreshCurrentGroupDetails() async {
+    final membership = _activeMembership;
+    if (membership == null) return;
+    await _loadGroupDetails(membership.groupId);
+  }
+
   List<_LeagueParticipantData> _selectParticipantsForLeaderboard(
     List<_LeagueParticipantData> raw,
     int desiredCount,
@@ -1990,12 +2051,17 @@ class CommunityController extends GetxController {
       pool.removeWhere((p) => p.member.userId == currentUserId);
     }
 
-    pool.shuffle(random);
+    // Separate real and virtual users to prioritize real ones.
+    final realUsers = pool.where((p) => !(p.member.isVirtual)).toList();
+    final virtualUsers = pool.where((p) => p.member.isVirtual).toList();
+    realUsers.shuffle(random);
+    virtualUsers.shuffle(random);
+
     final List<_LeagueParticipantData> selected = [];
     if (currentUser != null) {
       selected.add(currentUser);
     }
-    for (final participant in pool) {
+    for (final participant in realUsers.followedBy(virtualUsers)) {
       if (selected.length >= desiredCount) break;
       selected.add(participant);
     }
@@ -2110,6 +2176,15 @@ class CommunityController extends GetxController {
     final String currentUserId = _resolveUserId();
     final bool hasLiked = currentUserId != _fallbackUserId &&
         likes.any((like) => like.userId == currentUserId);
+    final bool canFollowAuthor = currentUserId != _fallbackUserId &&
+        post.userId.isNotEmpty &&
+        post.userId != currentUserId;
+    final bool isFollowingAuthor =
+        canFollowAuthor && (_isPersistedFollowing(post.userId) ||
+            await _firestoreService.isFollowingUser(
+              userId: currentUserId,
+              targetUserId: post.userId,
+            ));
 
     final List<CommunityVocabularyItem> vocabularyItems = words.map((word) {
   final raw = word.meaningSnapshot.trim();
@@ -2142,12 +2217,6 @@ class CommunityController extends GetxController {
         imageUrl = photo.imageUrl;
       }
     }
-
-    // Determine follow functionality based on author and current user
-    final bool canFollowAuthor = currentUserId != _fallbackUserId &&
-        post.userId != currentUserId &&
-        post.userId.isNotEmpty;
-    final bool isFollowingAuthor = false; // TODO: Check actual follow status from service
 
     return CommunityPost(
       id: post.postId,
@@ -2255,7 +2324,7 @@ class CommunityController extends GetxController {
 
   Future<void> onCreateGroup() async {
     final result = await Get.toNamed(
-      '/community/create-group', // Use literal route path
+      Routes.communityCreateGroup,
     );
     if (result is CommunityStudyGroup) {
       addStudyGroup(result);
@@ -2338,11 +2407,31 @@ class CommunityController extends GetxController {
       }
 
       if (status == 'active') {
-        Get.snackbar(
-          'Tham gia thành công',
-          'Bạn đã tham gia "${group.name}".',
-          snackPosition: SnackPosition.BOTTOM,
-        );
+        await _loadGroupDetails(group.groupId);
+        try {
+          final membership = await _firestoreService.getGroupMembership(
+            groupId: group.groupId,
+            userId: userId,
+          );
+          _activeMembership = membership ??
+              FirestoreGroupMember(
+                id: 'local_${group.groupId}_$userId',
+                groupId: group.groupId,
+                userId: userId,
+                role: group.leaderId == userId ? 'leader' : 'member',
+                status: 'active',
+                joinedAt: DateTime.now(),
+              );
+        } catch (_) {}
+
+        final details = joinedGroupDetails.value;
+        if (details == null) {
+          Get.snackbar(
+            'Tham gia thành công',
+            'Bạn đã tham gia "${group.name}".',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        }
       } else {
         // attempt to find the membership doc we just created so we can include
         // the member id for leader actions; fall back to empty id if not yet available
@@ -2417,6 +2506,7 @@ class CommunityController extends GetxController {
       experience: group.memberCount * 120,
       streak: 10,
       groupName: group.name,
+      userId: group.leaderId,
     );
     Get.toNamed(Routes.communityMemberProfile, arguments: args);
   }
@@ -2429,6 +2519,7 @@ class CommunityController extends GetxController {
       streak: post.comments.value,
       groupName:
           joinedGroupDetails.value?.group.name ?? currentLeague.value.name,
+      userId: post.authorId,
     );
     Get.toNamed(Routes.communityMemberProfile, arguments: args);
   }
@@ -2499,6 +2590,8 @@ class CommunityController extends GetxController {
           description: trimmedDescription,
         ),
       );
+      hiddenPostIds.add(post.id);
+      _refreshFilteredPosts();
       Get.back<void>();
       Get.snackbar(
         'Đã gửi báo cáo',
@@ -2512,6 +2605,64 @@ class CommunityController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
       );
     }
+  }
+
+  bool isPostOwner(CommunityPost post) {
+    return _resolveUserId() == post.authorId;
+  }
+
+  Future<void> deletePost(CommunityPost post) async {
+    final userId = _resolveUserId();
+    if (userId == _fallbackUserId || userId != post.authorId) {
+      Get.snackbar(
+        'Không thể xoá',
+        'Bạn chỉ có thể xoá bài viết của mình.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    try {
+      await _firestoreService.deletePostCascade(post.id);
+      hiddenPostIds.add(post.id);
+      _postCache.removeWhere((p) => p.id == post.id);
+      _refreshFilteredPosts();
+      Get.snackbar(
+        'Đã xoá bài viết',
+        'Bài viết đã được xoá vĩnh viễn.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Có lỗi xảy ra',
+        'Không thể xoá bài viết: $e',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  Future<void> _loadUserReportedPosts() async {
+    final userId = _resolveUserId();
+    if (userId == _fallbackUserId) {
+      return;
+    }
+    try {
+      final ids = await _firestoreService.getUserReportedPostIds(userId);
+      hiddenPostIds.addAll(ids);
+      _refreshFilteredPosts();
+    } catch (e) {
+      Get.log('Không thể tải danh sách bài đã báo cáo: $e');
+    }
+  }
+
+  List<CommunityPost> _filterHiddenPosts(List<CommunityPost> source) {
+    if (hiddenPostIds.isEmpty) return source;
+    final hidden = hiddenPostIds.toSet();
+    return source.where((post) => !hidden.contains(post.id)).toList();
+  }
+
+  void _refreshFilteredPosts() {
+    posts.assignAll(_filterHiddenPosts(_postCache));
   }
 
   Future<void> submitJoinRequest({
@@ -2722,6 +2873,18 @@ class CommunityController extends GetxController {
         vocabularyItems: vocabularyItems,
         createdAt: createdAt,
       );
+
+      if (Get.isRegistered<QuestService>()) {
+        await QuestService.to.incrementQuestProgress(
+          DailyQuestType.postCommunityImage,
+          amount: 1,
+          userId: userId,
+        );
+        await QuestService.to.refreshQuests();
+        if (Get.isRegistered<LearningTabController>()) {
+          await Get.find<LearningTabController>().refreshProgress();
+        }
+      }
     } catch (e) {
       Get.log('Không thể tạo bài viết cộng đồng: $e');
       rethrow;
@@ -2748,8 +2911,6 @@ class CommunityController extends GetxController {
         .toList();
     final xp = experience < 0 ? 0 : experience;
     final rank = _resolveCommunityRank(xp);
-    final followers = ((xp ~/ 5) + 40).clamp(30, 5000).toInt();
-    final following = ((streak * 2) + 20).clamp(10, 2000).toInt();
 
     final summary = ProfileSummary(
       displayName: name,
@@ -2761,8 +2922,8 @@ class CommunityController extends GetxController {
       experience: xp,
       streak: streak,
       posts: images.length,
-      followers: followers,
-      following: following,
+      followers: 0,
+      following: 0,
       todayHasActivity: streak > 0, // Assume activity if streak > 0
     );
 
@@ -2839,9 +3000,15 @@ class CommunityController extends GetxController {
 
     try {
       if (post.isLiked.value) {
+        final actor = await _getPostAuthor(userId);
         await _firestoreService.addPostLike(
           postId: post.id,
           userId: userId,
+        );
+        await _sendPostLikeNotification(
+          post: post,
+          actor: actor,
+          actorId: userId,
         );
         if (Get.isRegistered<QuestService>()) {
           await QuestService.to.incrementQuestProgress(
@@ -2888,31 +3055,40 @@ class CommunityController extends GetxController {
         return;
       }
 
-      if (post.authorId.isEmpty || post.authorId == userId) {
-        Get.snackbar(
-          'Lỗi',
-          'Không thể theo dõi chính mình hoặc tác giả không hợp lệ.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return;
-      }
+    if (post.authorId.isEmpty || post.authorId == userId) {
+      Get.snackbar(
+        'Lỗi',
+        'Không thể theo dõi chính mình hoặc tác giả không hợp lệ.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    if (post.isFollowingAuthor.value) {
+      return;
+    }
 
-      // Set loading state
-      post.isFollowActionPending.value = true;
+    // Set loading state
+    post.isFollowActionPending.value = true;
 
-      try {
-        // TODO: Implement actual follow functionality
-        // This should connect to your follow/unfollow service
-        // For now, just simulate the action
-        await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      await _firestoreService.followUser(
+        userId: userId,
+        targetUserId: post.authorId,
+      );
 
-        // Update follow state
-        post.isFollowingAuthor.value = true;
+      // Update follow state
+      post.isFollowingAuthor.value = true;
+      _applyFollowStateToAuthorPosts(
+        authorId: post.authorId,
+        isFollowing: true,
+      );
+      _persistFollowState(post.authorId, true);
+      updateFollowStateForUser(post.authorId, true);
 
-        Get.snackbar(
-          'Thành công',
-          'Đã theo dõi ${post.authorName}',
-          snackPosition: SnackPosition.BOTTOM,
+      Get.snackbar(
+        'Thành công',
+        'Đã theo dõi ${post.authorName}',
+        snackPosition: SnackPosition.BOTTOM,
         );
 
         // Update quest progress
@@ -2939,6 +3115,41 @@ class CommunityController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
       );
     }
+  }
+
+  void _applyFollowStateToAuthorPosts({
+    required String authorId,
+    required bool isFollowing,
+  }) {
+    if (authorId.isEmpty) return;
+    for (final post in posts) {
+      if (post.authorId == authorId) {
+        post.isFollowingAuthor.value = isFollowing;
+      }
+    }
+  }
+
+  void _persistFollowState(String targetUserId, bool isFollowing) {
+    if (targetUserId.trim().isEmpty) return;
+    final stored = _storage.read<List<dynamic>>(_followStorageKey) ?? [];
+    final set = <String>{
+      ...stored.whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty)
+    };
+    if (isFollowing) {
+      set.add(targetUserId.trim());
+    } else {
+      set.remove(targetUserId.trim());
+    }
+    _storage.write(_followStorageKey, set.toList(growable: false));
+  }
+
+  bool _isPersistedFollowing(String authorId) {
+    if (authorId.trim().isEmpty) return false;
+    final stored = _storage.read<List<dynamic>>(_followStorageKey);
+    if (stored == null) return false;
+    return stored
+        .whereType<String>()
+        .any((id) => id.trim() == authorId.trim());
   }
 
   /// Mark a post as viewed for analytics/tracking purposes
@@ -3045,6 +3256,12 @@ class CommunityController extends GetxController {
         commentType: 'text',
         content: trimmed,
       );
+      await _sendPostCommentNotification(
+        post: post,
+        actor: currentUser,
+        actorId: userId,
+        comment: trimmed,
+      );
       await _refreshPostComments(post);
       if (insertedIndex >= 0 && insertedIndex < post.commentMessages.length) {
         final updated =
@@ -3084,6 +3301,138 @@ class CommunityController extends GetxController {
     } catch (e) {
       Get.log('Không thể tải bình luận cho bài viết ${post.id}: $e');
     }
+  }
+
+  Future<void> _sendPostLikeNotification({
+    required CommunityPost post,
+    required String actorId,
+    FirestoreUser? actor,
+  }) async {
+    // Do not notify if actor is the author or IDs missing
+    if (post.authorId.isEmpty || post.authorId == actorId) return;
+    try {
+      // Resolve image with a hard fetch to ensure photo is populated
+      final imageUrl = await _resolvePostImageForNotification(post);
+      final actorName = (actor?.displayName?.trim().isNotEmpty == true)
+          ? actor!.displayName!.trim()
+          : 'Thành viên SnapLingua';
+      final payload = <String, dynamic>{
+        'title': '$actorName đã thả tym bài viết của bạn',
+        'subtitle': 'Nhấn để xem chi tiết trong cộng đồng.',
+        'actorId': actorId,
+        'actorName': actorName,
+        'postId': post.id,
+        'postImage': imageUrl,
+        'photoId': post.photoId,
+        'photoUrl': imageUrl,
+        'hasAction': true,
+        'actionText': 'Xem bài viết',
+      };
+      await _firestoreService.createNotification(
+        userId: post.authorId,
+        type: 'post_like',
+        payload: payload,
+      );
+    } catch (e) {
+      Get.log('Không thể gửi thông báo like bài viết ${post.id}: $e');
+    }
+  }
+
+  Future<void> _sendPostCommentNotification({
+    required CommunityPost post,
+    required String actorId,
+    required String comment,
+    FirestoreUser? actor,
+  }) async {
+    if (post.authorId.isEmpty || post.authorId == actorId) return;
+    try {
+      final imageUrl = await _resolvePostImageForNotification(post);
+      final actorName = (actor?.displayName?.trim().isNotEmpty == true)
+          ? actor!.displayName!.trim()
+          : 'Thành viên SnapLingua';
+      final payload = <String, dynamic>{
+        'title': '$actorName đã bình luận bài viết của bạn',
+        'subtitle': comment,
+        'actorId': actorId,
+        'actorName': actorName,
+        'postId': post.id,
+        'postImage': imageUrl,
+        'photoId': post.photoId,
+        'photoUrl': imageUrl,
+        'hasAction': true,
+        'actionText': 'Xem bài viết',
+      };
+      await _firestoreService.createNotification(
+        userId: post.authorId,
+        type: 'post_comment',
+        payload: payload,
+      );
+    } catch (e) {
+      Get.log('Không thể gửi thông báo bình luận bài viết ${post.id}: $e');
+    }
+  }
+
+  Future<String> _resolvePostImageAsync(CommunityPost post) async {
+    if (post.imageUrl.isNotEmpty) return post.imageUrl;
+    final photoId = post.photoId;
+    if (photoId != null && _photoCache.containsKey(photoId)) {
+      return _photoCache[photoId]?.imageUrl ?? '';
+    }
+    if (photoId != null && photoId.isNotEmpty) {
+      try {
+        final photo = await _firestoreService.getPhotoById(photoId);
+        if (photo != null) {
+          _photoCache[photoId] = photo;
+          if (photo.imageUrl.isNotEmpty) return photo.imageUrl;
+        }
+      } catch (e) {
+        Get.log('Không thể tải ảnh $photoId: $e');
+      }
+    } else if (post.id.isNotEmpty) {
+      try {
+        final fetched = await _firestoreService.getPostById(post.id);
+        if (fetched != null) {
+          if (fetched.photoId != null && fetched.photoId!.isNotEmpty) {
+            final photo = await _firestoreService.getPhotoById(fetched.photoId!);
+            if (photo != null) {
+              _photoCache[fetched.photoId!] = photo;
+              if (photo.imageUrl.isNotEmpty) return photo.imageUrl;
+            }
+          }
+          if (fetched.photoUrl.isNotEmpty) return fetched.photoUrl;
+        }
+      } catch (e) {
+        Get.log('Không thể tải ảnh bài viết ${post.id}: $e');
+      }
+    }
+    // Last resort: return whatever imageUrl/post photoUrl we have (may be empty string).
+    return post.imageUrl;
+  }
+
+  Future<String> _resolvePostImageForNotification(CommunityPost post) async {
+    // Prefer cached/full resolution
+    var image = await _resolvePostImageAsync(post);
+    if (image.isNotEmpty) return image;
+
+    // Hard fetch the post to get latest photo url/id
+    try {
+      final fetched = await _firestoreService.getPostById(post.id);
+      if (fetched != null) {
+        if (fetched.photoId != null && fetched.photoId!.isNotEmpty) {
+          final photo = await _firestoreService.getPhotoById(fetched.photoId!);
+          if (photo != null && photo.imageUrl.isNotEmpty) {
+            _photoCache[fetched.photoId!] = photo;
+            return photo.imageUrl;
+          }
+        }
+        if (fetched.photoUrl.isNotEmpty) {
+          return fetched.photoUrl;
+        }
+      }
+    } catch (e) {
+      Get.log('Không thể lấy ảnh cho thông báo bài viết ${post.id}: $e');
+    }
+    return image;
   }
 
   void showComments(CommunityPost post) {
@@ -3525,6 +3874,9 @@ class CommunityController extends GetxController {
       // to keep community views in sync
 
       Get.log('Updated follow state for user $userId: following=$isFollowing');
+
+      _persistFollowState(userId, isFollowing);
+      _applyFollowStateToAuthorPosts(authorId: userId, isFollowing: isFollowing);
 
       // Notify any registered community member profile controllers
       if (Get.isRegistered<CommunityMemberProfileController>()) {

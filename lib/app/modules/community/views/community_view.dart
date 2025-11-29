@@ -861,7 +861,7 @@ class _FeedCard extends StatelessWidget {
             color: const Color(0xFF6F7B87),
             size: 22.sp,
           ),
-          onPressed: () => _showReportSheet(context),
+          onPressed: () => _onPostMenuPressed(context),
           splashRadius: 24.r,
         ),
       ],
@@ -1738,6 +1738,33 @@ class _FeedCard extends StatelessWidget {
         snackPosition: SnackPosition.BOTTOM,
       );
     }
+  }
+
+  void _onPostMenuPressed(BuildContext context) {
+    final communityController = Get.find<CommunityController>();
+    final isOwner = communityController.isPostOwner(post);
+    if (isOwner) {
+      _confirmDeletePost(context, communityController);
+    } else {
+      _showReportSheet(context);
+    }
+  }
+
+  void _confirmDeletePost(
+    BuildContext context,
+    CommunityController controller,
+  ) {
+    Get.defaultDialog(
+      title: 'Xoá bài viết',
+      middleText: 'Bạn có chắc muốn xoá bài viết này?\nHành động này không thể hoàn tác.',
+      textCancel: 'Huỷ',
+      textConfirm: 'Xoá',
+      confirmTextColor: Colors.white,
+      onConfirm: () {
+        Get.back<void>();
+        controller.deletePost(post);
+      },
+    );
   }
 
   Future<void> _showReportSheet(BuildContext context) async {

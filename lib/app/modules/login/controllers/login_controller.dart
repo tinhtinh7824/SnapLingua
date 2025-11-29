@@ -6,7 +6,16 @@ import '../../../data/services/google_sign_in_service.dart';
 import '../../../data/services/local_storage_service.dart';
 import '../../../data/models/google_login_request.dart';
 import '../../../core/theme/app_widgets.dart';
-
+import '../../../data/services/service_binding.dart';
+import '../../home/controllers/home_controller.dart';
+import '../../home/controllers/home_stats_controller.dart';
+import '../../home/controllers/learning_tab_controller.dart';
+import '../../review/controllers/review_controller.dart';
+import '../../shop/controllers/shop_controller.dart';
+import '../../community/controllers/community_controller.dart';
+import '../../community_detail/controllers/community_detail_controller.dart';
+import '../../profile/controllers/profile_controller.dart';
+import '../../notification/controllers/notification_controller.dart';
 class LoginController extends GetxController {
   static LoginController get to => Get.find();
 
@@ -102,8 +111,6 @@ class LoginController extends GetxController {
         password: passwordController.text,
       );
 
-      _isLoading.value = false;
-
       if (result['success'] == true) {
         // AuthService tự lưu trạng thái, nhưng vẫn sync sang LocalStorageService nếu cần
         await LocalStorageService.saveUserData(
@@ -113,7 +120,8 @@ class LoginController extends GetxController {
           avatarUrl: null,
         );
 
-        Get.offAllNamed(Routes.home);
+        await _resetSessionForNewLogin();
+        await Get.offAllNamed(Routes.home);
       } else {
         AppWidgets.showErrorDialog(
           title: 'Thông báo',
@@ -123,11 +131,12 @@ class LoginController extends GetxController {
         );
       }
     } catch (e) {
-      _isLoading.value = false;
       AppWidgets.showErrorDialog(
         title: 'Lỗi kết nối',
         message: 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.',
       );
+    } finally {
+      _isLoading.value = false;
     }
   }
 
@@ -137,11 +146,11 @@ class LoginController extends GetxController {
       // B1: Đăng nhập Google
       final googleAccount = await _googleSignInService.signIn();
       if (googleAccount == null) {
-        _isLoading.value = false;
         AppWidgets.showInfoDialog(
           title: 'Thông báo',
           message: 'Đăng nhập Google bị hủy',
         );
+        _isLoading.value = false;
         return;
       }
 
@@ -157,14 +166,15 @@ class LoginController extends GetxController {
       );
       await _authService.onInit(); // refresh trạng thái
 
-      _isLoading.value = false;
-      Get.offAllNamed(Routes.home);
+      await _resetSessionForNewLogin();
+      await Get.offAllNamed(Routes.home);
     } catch (e) {
-      _isLoading.value = false;
       AppWidgets.showErrorDialog(
         title: 'Lỗi kết nối',
         message: 'Không thể kết nối đến Google. Vui lòng thử lại.',
       );
+    } finally {
+      _isLoading.value = false;
     }
   }
 
@@ -178,5 +188,71 @@ class LoginController extends GetxController {
 
   void goToRegister() {
     Get.toNamed(Routes.register);
+  }
+
+  Future<void> _resetSessionForNewLogin() async {
+    // Clear old controllers to avoid stale state
+    await _safeDelete<HomeController>();
+    await _safeDelete<HomeStatsController>();
+    await _safeDelete<LearningTabController>();
+    await _safeDelete<ShopController>();
+    await _safeDelete<CommunityController>();
+    await _safeDelete<CommunityDetailController>();
+    await _safeDelete<ProfileController>();
+    await _safeDelete<NotificationController>();
+    await _safeDelete<ReviewController>();
+
+    // Rebind services so subsequent screens use fresh data
+    ServiceBinding().dependencies();
+
+    // Preload the main tabs/controllers so data is ready when user opens them
+    final homeController =
+        Get.isRegistered<HomeController>() ? Get.find<HomeController>() : Get.put(HomeController());
+    if (!Get.isRegistered<ReviewController>()) {
+      Get.put<ReviewController>(ReviewController());
+    }
+    if (!Get.isRegistered<LearningTabController>()) {
+      Get.put<LearningTabController>(LearningTabController());
+    }
+    // Ensure HomeStats (used by Learning tab/home header) starts loading
+    if (!Get.isRegistered<HomeStatsController>()) {
+      Get.put<HomeStatsController>(HomeStatsController(), permanent: true);
+    } else {
+      Get.find<HomeStatsController>().load();
+    }
+    // Pre-instantiate community and profile controllers so they fetch immediately
+    if (!Get.isRegistered<CommunityController>()) {
+      Get.put<CommunityController>(CommunityController());
+    } else {
+      // No explicit load method; onInit already binds streams
+    }
+    if (!Get.isRegistered<ProfileController>()) {
+      Get.put<ProfileController>(ProfileController());
+    } else {
+      Get.find<ProfileController>().loadProfile();
+    }
+
+    // Kick off initial data loads so tabs are hydrated
+    final preloadTasks = <Future<void>>[];
+    if (Get.isRegistered<HomeStatsController>()) {
+      preloadTasks.add(Get.find<HomeStatsController>().load());
+    }
+    if (Get.isRegistered<LearningTabController>()) {
+      preloadTasks.add(Get.find<LearningTabController>().refreshProgress());
+    }
+    if (Get.isRegistered<ProfileController>()) {
+      preloadTasks.add(Get.find<ProfileController>().loadProfile());
+    }
+
+    await Future.wait(preloadTasks);
+
+    // Set default tab to home
+    homeController.changeTab(0);
+  }
+
+  Future<void> _safeDelete<T>() async {
+    if (Get.isRegistered<T>()) {
+      await Get.delete<T>(force: true);
+    }
   }
 }
