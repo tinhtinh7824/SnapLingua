@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
 import '../../../data/services/user_service.dart';
+import '../../../data/services/auth_service.dart';
+import '../../community/controllers/community_controller.dart';
 import '../../profile/controllers/profile_controller.dart';
 
 class ProfileEditController extends GetxController {
@@ -128,6 +130,22 @@ class ProfileEditController extends GetxController {
       if (result['success'] == true) {
         if (Get.isRegistered<ProfileController>()) {
           await Get.find<ProfileController>().loadProfile();
+        }
+        // Push fresh profile data to community (feed, groups, leaderboard)
+        try {
+          final auth = Get.isRegistered<AuthService>() ? AuthService.to : null;
+          final userId = auth?.currentUserId ?? '';
+          if (userId.isNotEmpty && Get.isRegistered<CommunityController>()) {
+            final community = Get.find<CommunityController>();
+            community.applyCurrentUserProfileLocal(
+              userId: userId,
+              displayName: name,
+              avatarUrl: avatarUrlToSave,
+            );
+            await community.refreshPostsForUser(userId);
+          }
+        } catch (_) {
+          // Best-effort only; ignore failures to keep the flow smooth.
         }
         Get.back(result: true);
         Get.snackbar(

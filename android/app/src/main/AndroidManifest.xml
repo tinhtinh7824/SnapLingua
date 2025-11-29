@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Cho phép đặt báo thức chính xác để lịch nhắc học hoạt động trên Android 12+ -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Bắt buộc trên Android 13+ để hiển thị thông báo -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Snaplingua"
         android:name="${applicationName}"

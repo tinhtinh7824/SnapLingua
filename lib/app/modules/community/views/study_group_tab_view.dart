@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -57,108 +59,113 @@ class StudyGroupTabView extends StatelessWidget {
       Builder(
         builder: (sheetContext) {
           final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
-            ),
-            padding: EdgeInsets.only(
-              left: 20.w,
-              right: 20.w,
-              top: 24.h,
-              bottom: bottomInset + 20.h,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 48.w,
-                    height: 4.h,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0E6EE),
-                      borderRadius: BorderRadius.circular(12.r),
-                    ),
-                  ),
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
                 ),
-                SizedBox(height: 18.h),
-                Text(
-                  'Tham gia nhóm',
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF15233B),
-                  ),
+                padding: EdgeInsets.only(
+                  left: 20.w,
+                  right: 20.w,
+                  top: 24.h,
+                  bottom: bottomInset + 20.h,
                 ),
-                SizedBox(height: 16.h),
-                TextField(
-                  controller: messageController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Giới thiệu bản thân với trưởng nhóm',
-                    hintStyle: TextStyle(
-                      fontSize: 14.sp,
-                      color: const Color(0xFF7A8AA6),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF5F9FF),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18.r),
-                      borderSide: BorderSide(
-                        color: const Color(0xFFD4E6FF),
-                        width: 1.2,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 48.w,
+                        height: 4.h,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE0E6EE),
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
                       ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18.r),
-                      borderSide: BorderSide(
-                        color: const Color(0xFFD4E6FF),
-                        width: 1.2,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18.r),
-                      borderSide: BorderSide(
-                        color: const Color(0xFF0A69C7),
-                        width: 1.4,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16.w,
-                      vertical: 14.h,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 20.h),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0A69C7),
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 14.h),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22.r),
-                      ),
-                    ),
-                    onPressed: () {
-                      Get.back();
-                      controller.submitJoinRequest(
-                        group: group,
-                        message: messageController.text,
-                      );
-                    },
-                    child: Text(
-                      'Gửi yêu cầu',
+                    SizedBox(height: 18.h),
+                    Text(
+                      'Tham gia nhóm',
                       style: TextStyle(
-                        fontSize: 16.sp,
+                        fontSize: 18.sp,
                         fontWeight: FontWeight.w700,
+                        color: const Color(0xFF15233B),
                       ),
                     ),
-                  ),
+                    SizedBox(height: 16.h),
+                    TextField(
+                      controller: messageController,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        hintText: 'Giới thiệu bản thân với trưởng nhóm',
+                        hintStyle: TextStyle(
+                          fontSize: 14.sp,
+                          color: const Color(0xFF7A8AA6),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F9FF),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18.r),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFD4E6FF),
+                            width: 1.2,
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18.r),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFD4E6FF),
+                            width: 1.2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18.r),
+                          borderSide: BorderSide(
+                            color: const Color(0xFF0A69C7),
+                            width: 1.4,
+                          ),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16.w,
+                          vertical: 14.h,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20.h),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0A69C7),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 14.h),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22.r),
+                          ),
+                        ),
+                        onPressed: () {
+                          Get.back();
+                          controller.submitJoinRequest(
+                            group: group,
+                            message: messageController.text,
+                          );
+                        },
+                        child: Text(
+                          'Gửi yêu cầu',
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         },
@@ -239,10 +246,6 @@ class GroupSearchBar extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28.r),
-              border: Border.all(
-                color: const Color(0xFFB7D5FF),
-                width: 1.2,
-              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
@@ -251,25 +254,45 @@ class GroupSearchBar extends StatelessWidget {
                 ),
               ],
             ),
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
             alignment: Alignment.center,
-            child: TextField(
-              controller: controller.groupSearchController,
-              onChanged: controller.onStudyGroupSearch,
-              decoration: InputDecoration(
-                hintText: 'Tìm nhóm',
-                hintStyle: TextStyle(
-                  fontSize: 14.sp,
-                  color: const Color(0xFF7B8FA5),
+            child: Obx(() {
+              final hasText = controller.groupSearchQuery.value.isNotEmpty;
+              return TextField(
+                controller: controller.groupSearchController,
+                onChanged: controller.onStudyGroupSearch,
+                decoration: InputDecoration(
+                  hintText: 'Tìm nhóm',
+                  hintStyle: TextStyle(
+                    fontSize: 14.sp,
+                    color: const Color(0xFF7B8FA5),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: const Color(0xFF0A69C7),
+                    size: 22.sp,
+                  ),
+                  suffixIcon: hasText
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: const Color(0xFF7B8FA5),
+                            size: 20.sp,
+                          ),
+                          onPressed: () {
+                            controller.groupSearchController.clear();
+                            controller.onStudyGroupSearch('');
+                            FocusScope.of(context).unfocus();
+                          },
+                          splashRadius: 18.r,
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12.h),
                 ),
-                border: InputBorder.none,
-                icon: Icon(
-                  Icons.search_rounded,
-                  color: const Color(0xFF0A69C7),
-                  size: 24.sp,
-                ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
         SizedBox(width: 14.w),
@@ -995,10 +1018,24 @@ class LeaderboardTile extends StatelessWidget {
             ),
           ),
         );
-      } else {
+      } else if (avatarUrl.startsWith('assets/')) {
         avatarContent = ClipOval(
           child: Image.asset(
             avatarUrl,
+            width: 44.w,
+            height: 44.w,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Icon(
+              Icons.person_rounded,
+              size: 22.sp,
+              color: colors.secondary,
+            ),
+          ),
+        );
+      } else {
+        avatarContent = ClipOval(
+          child: Image.file(
+            File(avatarUrl),
             width: 44.w,
             height: 44.w,
             fit: BoxFit.cover,

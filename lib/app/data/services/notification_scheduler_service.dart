@@ -21,6 +21,7 @@ class NotificationSchedulerService extends GetxService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin;
 
   bool _initialized = false;
+  bool _canScheduleExact = false;
 
   Future<NotificationSchedulerService> init() async {
     if (_initialized) return this;
@@ -62,11 +63,88 @@ class NotificationSchedulerService extends GetxService {
 
         // Wait a bit and then request exact alarms permission
         await Future.delayed(const Duration(milliseconds: 100));
-        await androidImplementation.requestExactAlarmsPermission();
+        _canScheduleExact =
+            await androidImplementation.requestExactAlarmsPermission() ?? false;
+        // Một số phiên bản plugin/platform không hỗ trợ kiểm tra trạng thái;
+        // nếu request trả về false, ta vẫn giữ nguyên (_canScheduleExact) để
+        // dùng lịch inexact.
       } catch (e) {
         // Log error but don't throw to avoid breaking the service
         debugPrint('Permission request error: $e');
       }
+    }
+  }
+
+  /// Gửi thông báo thử ngay lập tức để kiểm tra quyền/thông báo.
+  Future<void> showTestNotification() async {
+    await init();
+
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+
+    await _notificationsPlugin.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'SnapLingua nhắc học (test)',
+      'Nếu bạn thấy được thông báo này thì quyền đã ok.',
+      details,
+    );
+  }
+
+  /// Lên lịch thông báo thử sau [delay] (mặc định 1 phút) để kiểm tra scheduling.
+  Future<void> scheduleTestNotification({Duration delay = const Duration(minutes: 1)}) async {
+    await init();
+    final tz.TZDateTime scheduled =
+        tz.TZDateTime.from(DateTime.now().add(delay), tz.local);
+
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+
+    if (_canScheduleExact) {
+      await _notificationsPlugin.zonedSchedule(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'SnapLingua nhắc học (test hẹn giờ)',
+        'Thông báo test hẹn giờ sau ${delay.inMinutes} phút.',
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        androidAllowWhileIdle: true,
+      );
+    } else {
+      // Fallback: nếu không có quyền exact alarm, dùng delay trong app để đảm bảo người dùng
+      // thấy thông báo test, dù có thể không đánh thức thiết bị sau khi app bị kill.
+      Future.delayed(delay, () {
+        showTestNotification();
+      });
     }
   }
 
@@ -156,7 +234,9 @@ class NotificationSchedulerService extends GetxService {
           message,
           scheduledDate,
           notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: _canScheduleExact
+              ? AndroidScheduleMode.exactAllowWhileIdle
+              : AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
           matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,

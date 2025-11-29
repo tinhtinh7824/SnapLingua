@@ -172,6 +172,8 @@ class ShopView extends GetView<ShopController> {
           Text(
             title,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12.sp,
               fontWeight: FontWeight.w600,

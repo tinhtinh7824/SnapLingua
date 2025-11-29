@@ -203,13 +203,51 @@ class ProfileNotificationView extends GetView<ProfileNotificationController> {
   }
 
   Widget _buildFooterInfo() {
-    return Text(
-      'Snaplingua sẽ gửi thông báo qua hệ thống của thiết bị. Hãy đảm bảo bạn đã bật quyền thông báo cho ứng dụng.',
-      style: TextStyle(
-        color: const Color(0xFF60718C),
-        fontSize: 12.sp,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.notifications_active_outlined),
+            label: const Text('Gửi thử thông báo'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1CB0F6),
+              side: const BorderSide(color: Color(0xFF1CB0F6), width: 1.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14.r),
+              ),
+              padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 12.w),
+            ),
+            onPressed: controller.sendTestNotification,
+          ),
+        ),
+        SizedBox(height: 10.h),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.schedule_outlined),
+            label: const Text('Gửi thử trong 1 phút'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1CB0F6),
+              side: const BorderSide(color: Color(0xFF1CB0F6), width: 1.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14.r),
+              ),
+              padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 12.w),
+            ),
+            onPressed: controller.sendScheduledTestNotification,
+          ),
+        ),
+        SizedBox(height: 10.h),
+        Text(
+          'Snaplingua sẽ gửi thông báo qua hệ thống của thiết bị. Hãy đảm bảo bạn đã bật quyền thông báo cho ứng dụng.',
+          style: TextStyle(
+            color: const Color(0xFF60718C),
+            fontSize: 12.sp,
+          ),
+        ),
+      ],
     );
   }
 }
-

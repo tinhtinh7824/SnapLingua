@@ -21,6 +21,7 @@ abstract class Routes {
   static const profileGoal = _Paths.profileGoal;
   static const profileChangePassword = _Paths.profileChangePassword;
   static const profileNotification = _Paths.profileNotification;
+  static const profileGuide = _Paths.profileGuide;
   static const review = _Paths.review;
   static const community = _Paths.community;
   static const communityDetail = _Paths.communityDetail;
@@ -57,6 +58,7 @@ abstract class _Paths {
   static const profileGoal = '/profile/goal';
   static const profileChangePassword = '/profile/change-password';
   static const profileNotification = '/profile/notification';
+  static const profileGuide = '/profile/guide';
   static const review = '/review';
   static const community = '/community';
   static const communityDetail = '/community/detail';

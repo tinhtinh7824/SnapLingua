@@ -45,6 +45,8 @@ import '../modules/profile_change_password/bindings/profile_change_password_bind
 import '../modules/profile_change_password/views/profile_change_password_view.dart';
 import '../modules/profile_notification/bindings/profile_notification_binding.dart';
 import '../modules/profile_notification/views/profile_notification_view.dart';
+import '../modules/profile_guide/bindings/profile_guide_binding.dart';
+import '../modules/profile_guide/views/profile_guide_view.dart';
 import '../modules/community_member_profile/bindings/community_member_profile_binding.dart';
 import '../modules/community_member_profile/views/community_member_profile_view.dart';
 import '../modules/community_detail/bindings/community_detail_binding.dart';
@@ -162,6 +164,11 @@ class AppPages {
       name: _Paths.profileNotification,
       page: () => const ProfileNotificationView(),
       binding: ProfileNotificationBinding(),
+    ),
+    GetPage(
+      name: _Paths.profileGuide,
+      page: () => const ProfileGuideView(),
+      binding: ProfileGuideBinding(),
     ),
     GetPage(
       name: _Paths.community,

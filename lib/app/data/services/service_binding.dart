@@ -16,6 +16,7 @@ import 'goal_service.dart';
 import 'notification_settings_service.dart';
 import 'push_notification_service.dart';
 import 'yolo_tflite_detector_service.dart';
+import 'notification_scheduler_service.dart';
 import '../../../firebase_options.dart';
 
 class ServiceBinding extends Bindings {
@@ -63,6 +64,10 @@ class ServiceBinding extends Bindings {
     if (!Get.isRegistered<PushNotificationService>()) {
       Get.put<PushNotificationService>(PushNotificationService(), permanent: true);
     }
+    if (!Get.isRegistered<NotificationSchedulerService>()) {
+      Get.put<NotificationSchedulerService>(NotificationSchedulerService(),
+          permanent: true);
+    }
     if (!Get.isRegistered<NotificationSettingsService>()) {
       Get.put<NotificationSettingsService>(NotificationSettingsService(), permanent: true);
     }
@@ -80,6 +85,16 @@ class DatabaseInitializer {
 
       // Initialize service binding after Firebase is ready
       ServiceBinding().dependencies();
+
+      // Initialize push notifications and load notification settings so the
+      // notification screen can immediately register the device and show
+      // current state.
+      if (Get.isRegistered<PushNotificationService>()) {
+        await Get.find<PushNotificationService>().init();
+      }
+      if (Get.isRegistered<NotificationSettingsService>()) {
+        await Get.find<NotificationSettingsService>().ensureLoaded();
+      }
 
       // Wait for core services to initialize
       await Get.find<RealmService>().onInit();

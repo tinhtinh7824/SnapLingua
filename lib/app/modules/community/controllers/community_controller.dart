@@ -672,8 +672,15 @@ class CommunityController extends GetxController {
     }
 
     try {
+      final updatedUser = await _getPostAuthor(userId);
+      if (updatedUser != null) {
+        _applyUserProfileToCaches(updatedUser);
+      }
+
       // Rebind posts to force rebuild with fresh author data.
       _bindPosts();
+      // Rebind groups so leader names/avatars are refreshed in study group list.
+      _bindGroups();
 
       // If a league cycle is active, rebind league members so leaderboard is rebuilt.
       if (activeLeagueCycle.value != null) {
@@ -684,6 +691,102 @@ class CommunityController extends GetxController {
       _refreshJoinedGroupFromGroups();
     } catch (e) {
       Get.log('refreshPostsForUser error: $e');
+    }
+  }
+
+  /// Apply locally-known profile changes (e.g., after user edits their name/avatar)
+  /// so community UI refreshes instantly without waiting for Firestore propagation.
+  void applyCurrentUserProfileLocal({
+    required String userId,
+    required String displayName,
+    required String avatarUrl,
+  }) {
+    if (userId.isEmpty) return;
+    final normalizedName =
+        displayName.trim().isNotEmpty ? displayName.trim() : 'Thành viên SnapLingua';
+    final normalizedAvatar =
+        avatarUrl.trim().isNotEmpty ? avatarUrl.trim() : FirestoreUser.defaultAvatarPath;
+    final localUser = FirestoreUser(
+      id: userId,
+      email: '',
+      displayName: normalizedName,
+      avatarUrl: normalizedAvatar,
+      createdAt: DateTime.now(),
+    );
+    _userCache[userId] = localUser;
+    _applyUserProfileToCaches(localUser);
+  }
+
+  void _applyUserProfileToCaches(FirestoreUser user) {
+    final displayName = (user.displayName ?? '').trim().isNotEmpty
+        ? (user.displayName ?? '').trim()
+        : 'Thành viên SnapLingua';
+    final avatarUrl = (user.avatarUrl ?? '').trim();
+
+    // Update cached posts immediately so feed reflects the change without waiting for Firestore stream.
+    if (_postCache.isNotEmpty) {
+      _postCache = _postCache.map((post) {
+        if (post.authorId != user.id) return post;
+        return CommunityPost(
+          id: post.id,
+          authorId: post.authorId,
+          authorName: displayName,
+          authorAvatar: avatarUrl.isNotEmpty ? avatarUrl : post.authorAvatar,
+          postedAt: post.postedAt,
+          imageUrl: post.imageUrl,
+          photoId: post.photoId,
+          vocabularyItems: post.vocabularyItems,
+          likes: post.likes.value,
+          comments: post.comments.value,
+          bookmarks: post.bookmarks.value,
+          isLiked: post.isLiked.value,
+          initialVocabularyIndex: post.currentVocabularyIndex.value,
+          initiallySelected: true,
+          initialComments: post.commentMessages.toList(),
+          isSendingComment: post.isSendingComment.value,
+          canFollowAuthor: post.canFollowAuthor,
+          isFollowingAuthor: post.isFollowingAuthor.value,
+          isFollowActionPending: post.isFollowActionPending.value,
+        );
+      }).toList(growable: false);
+      posts.assignAll(_filterHiddenPosts(_postCache));
+    }
+
+    // Update study group list (leader name) and any joined group detail state.
+    if (studyGroups.isNotEmpty) {
+      final updatedGroups = studyGroups.map((group) {
+        if (group.leaderId != user.id) return group;
+        return group.copyWith(leaderName: displayName);
+      }).toList(growable: false);
+      studyGroups.assignAll(updatedGroups);
+    }
+
+    final details = joinedGroupDetails.value;
+    if (details != null) {
+      final updatedGroup = details.group.leaderId == user.id
+          ? details.group.copyWith(leaderName: displayName)
+          : details.group;
+      final updatedScores = details.memberScores
+          .map((member) => member.userId == user.id
+              ? CommunityGroupMemberScore(
+                  rank: member.rank,
+                  userId: member.userId,
+                  displayName: displayName,
+                  totalPoints: member.totalPoints,
+                  weeklyPoints: member.weeklyPoints,
+                  avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : member.avatarUrl,
+                  isHighlighted: member.isHighlighted,
+                )
+              : member)
+          .toList(growable: false);
+      joinedGroupDetails.value = CommunityGroupDetails(
+        group: updatedGroup,
+        currentMilestoneLabel: details.currentMilestoneLabel,
+        daysRemaining: details.daysRemaining,
+        currentPoints: details.currentPoints,
+        milestones: details.milestones,
+        memberScores: updatedScores,
+      );
     }
   }
 

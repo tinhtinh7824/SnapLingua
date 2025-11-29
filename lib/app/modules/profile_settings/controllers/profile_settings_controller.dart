@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../routes/app_pages.dart';
 import '../../profile/controllers/profile_controller.dart';
+import '../../../routes/app_pages.dart' as routes;
 
 class ProfileSettingsController extends GetxController {
   ProfileSettingsController({AuthService? authService})
@@ -39,11 +40,7 @@ class ProfileSettingsController extends GetxController {
   }
 
   void openGuide() {
-    Get.snackbar(
-      'Sắp ra mắt',
-      'Tài liệu hướng dẫn sẽ sớm được bổ sung.',
-      snackPosition: SnackPosition.BOTTOM,
-    );
+    Get.toNamed(routes.Routes.profileGuide);
   }
 
   Future<void> logout() async {
