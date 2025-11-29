@@ -269,12 +269,13 @@ class FirestoreService extends GetxService {
     required String iconPath,
     required String createdBy,
     bool requireApproval = false,
+    int initialMemberCount = 1,
   }) async {
     final data = FirestoreGroup(
       groupId: '',
       name: name,
       requireApproval: requireApproval,
-      memberCount: 0,
+      memberCount: initialMemberCount,
       description: description,
       iconPath: iconPath,
       createdBy: createdBy,
@@ -824,6 +825,25 @@ class FirestoreService extends GetxService {
             snapshot.docs.map(FirestorePost.fromSnapshot).toList());
   }
 
+  Future<List<FirestorePost>> fetchCommunityPostsFallback({
+    String? visibility,
+    String? status,
+    int limit = 20,
+  }) async {
+    var query = _posts.where('status', isEqualTo: status ?? 'active');
+
+    if (visibility != null) {
+      query = query.where('visibility', isEqualTo: visibility);
+    }
+
+    final snapshot = await query.limit(limit).get();
+    final posts = snapshot.docs.map(FirestorePost.fromSnapshot).toList();
+    posts.sort(
+      (a, b) => b.createdAt.compareTo(a.createdAt),
+    );
+    return posts;
+  }
+
   Stream<List<FirestoreGroup>> listenToGroups({
     String? status,
     int limit = 20,
@@ -883,6 +903,26 @@ class FirestoreService extends GetxService {
     final doc = await _groups.doc(groupId).get();
     if (!doc.exists || doc.data() == null) return null;
     return FirestoreGroup.fromSnapshot(doc);
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    if (groupId.isEmpty) return;
+    final batch = _firestore.batch();
+
+    final members =
+        await _groupMembers.where('group_id', isEqualTo: groupId).get();
+    for (final doc in members.docs) {
+      batch.delete(doc.reference);
+    }
+
+    final messages =
+        await _groupMessages.where('group_id', isEqualTo: groupId).get();
+    for (final doc in messages.docs) {
+      batch.delete(doc.reference);
+    }
+
+    batch.delete(_groups.doc(groupId));
+    await batch.commit();
   }
 
   Future<List<FirestoreGroupMember>> getGroupMembers({
@@ -1096,6 +1136,13 @@ class FirestoreService extends GetxService {
         .map((doc) => (doc.data()['post_id'] as String?) ?? '')
         .where((id) => id.isNotEmpty)
         .toList(growable: false);
+  }
+
+  Future<void> incrementPostSaveCount(String postId, {int delta = 1}) async {
+    if (postId.isEmpty || delta == 0) return;
+    await _posts.doc(postId).update({
+      'save_count': FieldValue.increment(delta),
+    });
   }
 
   Future<void> deletePostCascade(String postId) async {

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:snaplingua/app/modules/community_detail/bindings/community_detail_binding.dart';
 import '../../../data/models/notification_item.dart';
@@ -5,6 +6,11 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/firestore_service.dart';
 import '../../../routes/app_pages.dart';
 import '../../../data/models/firestore_notification.dart';
+import '../../../data/models/firestore_post.dart';
+import '../../../data/models/firestore_post_comment.dart';
+import '../../../data/models/firestore_post_like.dart';
+import '../../../data/models/firestore_post_word.dart';
+import '../../../core/theme/app_widgets.dart';
 import '../../community/controllers/community_controller.dart';
 import '../../community/views/community_view.dart';
 import '../../community_detail/controllers/community_detail_controller.dart';
@@ -16,6 +22,8 @@ class NotificationController extends GetxController {
   final error = Rxn<String>();
   AuthService? _auth;
   FirestoreService? _firestore;
+  static const List<int> _streakMilestones = <int>[3, 7, 14, 21, 30, 50, 100];
+  final Map<String, CommunityPost> _postCache = <String, CommunityPost>{};
 
   @override
   void onInit() {
@@ -39,7 +47,8 @@ class NotificationController extends GetxController {
       }
 
       final raw = await _firestore!.getUserNotifications(userId: userId);
-      notifications.value = raw.map(_mapNotification).toList();
+      notifications.value =
+          raw.map(_mapNotification).whereType<NotificationItem>().toList();
       await _hydrateNotificationImages();
     } catch (e) {
       error.value = 'Không thể tải thông báo: $e';
@@ -101,40 +110,60 @@ class NotificationController extends GetxController {
     }
   }
 
-  Future<void> _openPostDetail(String postId, String? imageUrl, {String? photoId}) async {
-    // Try to reuse existing posts from CommunityController
-    CommunityPost? post;
-    if (Get.isRegistered<CommunityController>()) {
-      final community = Get.find<CommunityController>();
-      post = community.posts.firstWhereOrNull((p) => p.id == postId);
-    }
-
-    // If not found, fetch from Firestore to get accurate photo
-    if (post == null) {
-      final fetched = await _firestore?.getPostById(postId);
-      final resolvedImage = fetched?.photoUrl ??
-          imageUrl ??
-          await _resolvePhotoById(photoId ?? fetched?.photoId);
-      post = CommunityPost(
-        id: postId,
-        authorId: fetched?.userId ?? '',
-        authorName: '',
-        authorAvatar: '',
-        postedAt: '',
-        imageUrl: resolvedImage ?? '',
-        photoId: fetched?.photoId ?? photoId,
-        vocabularyItems: const [],
-        likes: 0,
-        comments: 0,
-        bookmarks: 0,
+  Future<void> _openPostDetail(
+    String postId,
+    String? imageUrl, {
+    String? photoId,
+  }) async {
+    // Return cached post immediately if available.
+    if (_postCache.containsKey(postId)) {
+      Get.to(
+        () => const CommunityDetailView(),
+        binding: CommunityDetailBinding(),
+        arguments: CommunityDetailArguments(post: _postCache[postId]!),
       );
+      return;
     }
 
-    Get.to(
-      () => const CommunityDetailView(),
-      binding: CommunityDetailBinding(),
-      arguments: CommunityDetailArguments(post: post),
+    AppWidgets.showLoadingOverlay(
+      message: 'Đang tải bài viết, vui lòng đợi...',
     );
+
+    try {
+      CommunityPost? post;
+      if (Get.isRegistered<CommunityController>()) {
+        final community = Get.find<CommunityController>();
+        post = community.posts.firstWhereOrNull((p) => p.id == postId);
+        if (post != null) {
+          _cachePost(post);
+        }
+      }
+
+      post ??=
+          await _fetchPostWithDetails(postId, imageUrl: imageUrl, photoId: photoId);
+
+      if (post == null) {
+        if (Get.isDialogOpen == true) Get.back<void>();
+        Get.snackbar(
+          'Không tìm thấy bài viết',
+          'Bài viết có thể đã bị xoá hoặc bạn không còn quyền xem.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      _cachePost(post);
+      if (Get.isDialogOpen == true) Get.back<void>();
+      Get.to(
+        () => const CommunityDetailView(),
+        binding: CommunityDetailBinding(),
+        arguments: CommunityDetailArguments(post: post),
+      );
+    } finally {
+      if (Get.isDialogOpen == true) {
+        Get.back<void>();
+      }
+    }
   }
 
   Future<String?> _resolvePhotoById(String? photoId) async {
@@ -222,10 +251,11 @@ class NotificationController extends GetxController {
     }
   }
 
-  NotificationItem _mapNotification(FirestoreNotification raw) {
+  NotificationItem? _mapNotification(FirestoreNotification raw) {
     final payload = raw.payload ?? {};
     final typeString = raw.type.toLowerCase();
     NotificationType resolvedType = NotificationType.achievement;
+    final streakCount = _parseStreakCount(payload);
     switch (typeString) {
       case 'follow':
         resolvedType = NotificationType.follow;
@@ -244,8 +274,18 @@ class NotificationController extends GetxController {
         resolvedType = NotificationType.achievement;
     }
 
-    final title = (payload['title'] as String?) ??
-        _defaultTitleFor(resolvedType, payload);
+    if (resolvedType == NotificationType.streak) {
+      // Only surface configured streak milestones and ignore missing/invalid counts.
+      if (streakCount == null || !_streakMilestones.contains(streakCount)) {
+        return null;
+      }
+    }
+
+    final title = _resolveTitle(
+      resolvedType,
+      payload,
+      streakCount: streakCount,
+    );
     final subtitle = payload['subtitle'] as String?;
     final imagePath = (payload['postImage'] ??
             payload['postThumbnail'] ??
@@ -272,8 +312,113 @@ class NotificationController extends GetxController {
       postId: payload['postId'] as String? ?? payload['post_id'] as String?,
       postPhotoId:
           payload['photoId'] as String? ?? payload['photo_id'] as String?,
-      streakCount: payload['streak'] as int?,
+      streakCount: streakCount,
     );
+  }
+
+  void _cachePost(CommunityPost post) {
+    if (post.id.isNotEmpty) {
+      _postCache[post.id] = post;
+    }
+  }
+
+  Future<CommunityPost?> _fetchPostWithDetails(
+    String postId, {
+    String? imageUrl,
+    String? photoId,
+  }) async {
+    final fetched = await _firestore?.getPostById(postId);
+    if (fetched == null) return null;
+
+    final words = await _firestore?.getPostWords(postId) ?? <FirestorePostWord>[];
+    final likes =
+        await _firestore?.getPostLikes(postId) ?? <FirestorePostLike>[];
+    final comments = await _firestore?.getPostComments(
+          postId,
+          status: 'active',
+          limit: 20,
+        ) ??
+        <FirestorePostComment>[];
+    final author = await _firestore?.getUserById(fetched.userId);
+    final vocabItems = words.map((word) {
+      final raw = word.meaningSnapshot.trim();
+      String head = raw;
+      String translation = '';
+      const sep = ' - ';
+      final idx = raw.indexOf(sep);
+      if (idx != -1) {
+        head = raw.substring(0, idx).trim();
+        translation = raw.substring(idx + sep.length).trim();
+      }
+      return CommunityVocabularyItem(
+        label: raw.isNotEmpty ? raw : head,
+        confidence: 1.0,
+        headword: head,
+        phonetic: word.exampleSnapshot ?? '',
+        translation: translation,
+      );
+    }).toList(growable: false);
+
+    final mappedComments = await _mapCommentsWithUsers(comments);
+    final resolvedImage = fetched.photoUrl.isNotEmpty
+        ? fetched.photoUrl
+        : imageUrl ??
+            await _resolvePhotoById(photoId ?? fetched.photoId) ??
+            '';
+
+    final displayName = author?.displayName?.trim().isNotEmpty == true
+        ? author!.displayName!.trim()
+        : 'Người học SnapLingua';
+    final avatar = author?.avatarUrl ?? '';
+
+    return CommunityPost(
+      id: fetched.postId,
+      authorId: fetched.userId,
+      authorName: displayName,
+      authorAvatar: avatar,
+      postedAt: _formatSimpleDate(fetched.createdAt),
+      imageUrl: resolvedImage,
+      photoId: fetched.photoId ?? photoId,
+      vocabularyItems: vocabItems,
+      likes: likes.length,
+      comments: mappedComments.length,
+      bookmarks: fetched.saveCount,
+      initialComments: mappedComments,
+      isSendingComment: false,
+      isLiked: false,
+      canFollowAuthor: true,
+      isFollowingAuthor: false,
+    );
+  }
+
+  Future<List<CommunityPostComment>> _mapCommentsWithUsers(
+      List<FirestorePostComment> comments) async {
+    final List<CommunityPostComment> mapped = [];
+    for (final comment in comments) {
+      final user = await _firestore?.getUserById(comment.userId);
+      final name = user?.displayName?.trim().isNotEmpty == true
+          ? user!.displayName!.trim()
+          : 'Người dùng SnapLingua';
+      final avatar = user?.avatarUrl ?? '';
+      mapped.add(
+        CommunityPostComment(
+          id: comment.commentId,
+          userId: comment.userId,
+          userName: name,
+          avatarUrl: avatar,
+          content: comment.content ?? '',
+          createdAt: comment.createdAt,
+        ),
+      );
+    }
+    return mapped;
+  }
+
+  String _formatSimpleDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day/$month/$year';
   }
 
   Future<void> _hydrateNotificationImages() async {
@@ -285,6 +430,13 @@ class NotificationController extends GetxController {
           continue;
         }
         String? resolvedImage;
+
+        // Try cached posts first
+        final cachedPost = _postCache[n.postId];
+        if (cachedPost != null && cachedPost.imageUrl.isNotEmpty) {
+          updated.add(n.copyWith(imagePath: cachedPost.imageUrl));
+          continue;
+        }
 
         // 1) Try cached posts already loaded in CommunityController
         if (Get.isRegistered<CommunityController>() &&
@@ -332,10 +484,21 @@ class NotificationController extends GetxController {
     }
   }
 
-  String _defaultTitleFor(
+  String _resolveTitle(
     NotificationType type,
-    Map<String, dynamic> payload,
-  ) {
+    Map<String, dynamic> payload, {
+    int? streakCount,
+  }) {
+    final customTitle = payload['title'] as String?;
+    if (type == NotificationType.streak) {
+      final count = streakCount ?? _parseStreakCount(payload) ?? 0;
+      return 'Chuỗi streak $count ngày!';
+    }
+
+    if (customTitle != null && customTitle.trim().isNotEmpty) {
+      return customTitle;
+    }
+
     switch (type) {
       case NotificationType.follow:
         final actor = payload['actorName'] as String? ?? 'Người dùng';
@@ -346,13 +509,36 @@ class NotificationController extends GetxController {
       case NotificationType.postComment:
         final actor = payload['actorName'] as String? ?? 'Ai đó';
         return '$actor đã bình luận bài viết của bạn';
-      case NotificationType.streak:
-        final streak = payload['streak'] as int? ?? 0;
-        return 'Bạn đã đạt $streak ngày streak!';
       case NotificationType.rankUp:
         return 'Bạn vừa thăng hạng mới!';
       case NotificationType.achievement:
         return 'Bạn vừa nhận được thành tựu mới';
+      case NotificationType.streak:
+        // Handled earlier; keep analyzer happy.
+        break;
     }
+    return customTitle?.trim().isNotEmpty == true
+        ? customTitle!.trim()
+        : 'Thông báo';
+  }
+
+  int? _parseStreakCount(Map<String, dynamic> payload) {
+    final candidates = [
+      payload['streak'],
+      payload['streakCount'],
+      payload['streak_count'],
+      payload['currentStreak'],
+    ];
+
+    for (final value in candidates) {
+      if (value == null) continue;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) {
+        final parsed = int.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
   }
 }

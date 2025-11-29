@@ -41,6 +41,35 @@ class DailyProgressService extends GetxService {
   CollectionReference<Map<String, dynamic>> get _dailyProgressCollection =>
       _firestore.collection('daily_progress');
 
+  Future<DocumentSnapshot<Map<String, dynamic>>?>
+      _getProgressDocWithRetryOrNull(
+    String progressId, {
+    int maxAttempts = 3,
+  }) async {
+    final docRef = _dailyProgressCollection.doc(progressId);
+    FirebaseException? lastError;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await docRef.get();
+      } on FirebaseException catch (e) {
+        final isRetryable =
+            e.code == 'unavailable' || e.code == 'deadline-exceeded';
+        if (!isRetryable || attempt == maxAttempts) {
+          break;
+        }
+        lastError = e;
+        final delayMs = 200 * math.pow(2, attempt - 1).toInt();
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+    }
+
+    debugPrint(
+      'Failed to fetch $progressId after $maxAttempts attempts: $lastError',
+    );
+    return null;
+  }
+
   Future<int> awardXp({
     required String userId,
     required int amount,
@@ -375,8 +404,8 @@ class DailyProgressService extends GetxService {
 
   Future<int> getDayXp(String userId, DateTime date) async {
     final progressId = _composeProgressId(userId, _dateOnly(date));
-    final doc = await _dailyProgressCollection.doc(progressId).get();
-    if (!doc.exists || doc.data() == null) return 0;
+    final doc = await _getProgressDocWithRetryOrNull(progressId);
+    if (doc == null || !doc.exists || doc.data() == null) return 0;
     return FirestoreDailyProgress.fromSnapshot(doc).xpGained;
   }
 
@@ -413,8 +442,8 @@ class DailyProgressService extends GetxService {
     if (userId.isEmpty) return null;
     final targetDate = _dateOnly(date ?? DateTime.now());
     final progressId = _composeProgressId(userId, targetDate);
-    final doc = await _dailyProgressCollection.doc(progressId).get();
-    if (!doc.exists || doc.data() == null) return null;
+    final doc = await _getProgressDocWithRetryOrNull(progressId);
+    if (doc == null || !doc.exists || doc.data() == null) return null;
     return FirestoreDailyProgress.fromSnapshot(doc);
   }
 
@@ -528,8 +557,8 @@ class DailyProgressService extends GetxService {
   }) async {
     if (!hasActivityAfter) return;
 
-    final snapshot = await _dailyProgressCollection.doc(progressId).get();
-    if (!snapshot.exists || snapshot.data() == null) {
+    final snapshot = await _getProgressDocWithRetryOrNull(progressId);
+    if (snapshot == null || !snapshot.exists || snapshot.data() == null) {
       return;
     }
 

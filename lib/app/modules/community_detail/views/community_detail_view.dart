@@ -10,6 +10,8 @@ import '../../../data/models/firestore_post_comment.dart';
 import '../../community/controllers/community_controller.dart';
 import '../controllers/community_detail_controller.dart';
 
+const int _minReportDescriptionLength = 10;
+
 class CommunityDetailView extends GetView<CommunityDetailController> {
   const CommunityDetailView({super.key});
 
@@ -36,7 +38,7 @@ class CommunityDetailView extends GetView<CommunityDetailController> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),
-            onPressed: () {},
+            onPressed: () => _onMorePressed(context, post),
           ),
         ],
       ),
@@ -47,6 +49,325 @@ class CommunityDetailView extends GetView<CommunityDetailController> {
         ),
       ),
     );
+  }
+
+  void _onMorePressed(BuildContext context, CommunityPost post) {
+    if (!Get.isRegistered<CommunityController>()) return;
+    final communityController = Get.find<CommunityController>();
+    final isOwner = communityController.isPostOwner(post);
+    if (isOwner) {
+      _confirmDeletePost(context, communityController, post);
+    } else {
+      _showReportSheet(context, communityController, post);
+    }
+  }
+
+  Future<void> _confirmDeletePost(
+    BuildContext context,
+    CommunityController controller,
+    CommunityPost post,
+  ) async {
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('Xoá bài viết'),
+        content: const Text(
+          'Bạn có chắc muốn xoá bài viết này? Hành động này không thể hoàn tác.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('Huỷ'),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text(
+              'Xoá',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+
+    if (confirmed == true) {
+      await controller.deletePost(post);
+      if (Get.isBottomSheetOpen ?? false) {
+        Get.back<void>();
+      }
+      Get.back<void>();
+    }
+  }
+
+  Future<void> _showReportSheet(
+    BuildContext context,
+    CommunityController communityController,
+    CommunityPost post,
+  ) async {
+    const reasons = CommunityController.reportReasons;
+    final noteController = TextEditingController();
+    final alreadyReported = communityController.hasReportedPost(post.id);
+    String selectedReason = reasons.first;
+
+    await Get.bottomSheet<void>(
+      StatefulBuilder(
+        builder: (sheetContext, setState) {
+          final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
+            ),
+            padding: EdgeInsets.only(
+              left: 24.w,
+              right: 24.w,
+              top: 20.h,
+              bottom: bottomInset + 24.h,
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 48.w,
+                      height: 4.h,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE0E6EE),
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 18.h),
+                  Text(
+                    'Báo cáo vi phạm',
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF11243A),
+                    ),
+                  ),
+                  SizedBox(height: 14.h),
+                  if (alreadyReported)
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(12.w),
+                      margin: EdgeInsets.only(bottom: 12.h),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3B0),
+                        borderRadius: BorderRadius.circular(16.r),
+                        border: Border.all(color: const Color(0xFFFFD57E)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: const Color(0xFF8C6E02), size: 20.sp),
+                          SizedBox(width: 10.w),
+                          Expanded(
+                            child: Text(
+                              'Bạn đã gửi báo cáo cho bài đăng này. '
+                              'Đội ngũ kiểm duyệt sẽ xem xét sớm nhất.',
+                              style: TextStyle(
+                                fontSize: 13.sp,
+                                color: const Color(0xFF6B5600),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ...List<Widget>.generate(
+                    reasons.length,
+                    (index) {
+                      final reason = reasons[index];
+                      final isSelected = selectedReason == reason;
+                      return Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                        child: InkWell(
+                          onTap: alreadyReported
+                              ? null
+                              : () {
+                                  setState(() => selectedReason = reason);
+                                },
+                          borderRadius: BorderRadius.circular(16.r),
+                          child: Ink(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12.w,
+                              vertical: 10.h,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16.r),
+                              color: isSelected
+                                  ? const Color(0xFFE6F4FF)
+                                  : Colors.white,
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFF0A69C7)
+                                    : const Color(0xFFD6DEEA),
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 20.w,
+                                  height: 20.w,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? const Color(0xFF0A69C7)
+                                          : const Color(0xFF7C8AA0),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    width: 10.w,
+                                    height: 10.w,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? const Color(0xFF0A69C7)
+                                          : Colors.transparent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 12.w),
+                                Expanded(
+                                  child: Text(
+                                    reason,
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF22303F),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (selectedReason == 'Khác') ...[
+                    SizedBox(height: 12.h),
+                    TextField(
+                      controller: noteController,
+                      maxLines: 3,
+                      enabled: !alreadyReported,
+                      decoration: InputDecoration(
+                        hintText: 'Mô tả chi tiết hơn...',
+                        hintStyle: TextStyle(
+                          fontSize: 13.sp,
+                          color: const Color(0xFF8A93A3),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF6F9FD),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18.r),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFD6DEEA),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18.r),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF0A69C7),
+                            width: 1.4,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  SizedBox(height: 22.h),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52.h,
+                    child: ElevatedButton(
+                      onPressed: alreadyReported
+                          ? null
+                          : () {
+                              if (selectedReason.trim().isEmpty) {
+                                Get.snackbar(
+                                  'Lỗi',
+                                  'Hãy chọn lý do báo cáo.',
+                                  snackPosition: SnackPosition.BOTTOM,
+                                );
+                                return;
+                              }
+
+                              if (selectedReason == 'Khác') {
+                                final description = noteController.text.trim();
+                                if (description.isEmpty) {
+                                  Get.snackbar(
+                                    'Thiếu thông tin',
+                                    'Hãy mô tả chi tiết khi chọn lý do "Khác".',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                  );
+                                  return;
+                                }
+                                if (description.length <
+                                    _minReportDescriptionLength) {
+                                  Get.snackbar(
+                                    'Mô tả quá ngắn',
+                                    'Hãy mô tả chi tiết ít nhất $_minReportDescriptionLength ký tự.',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                  );
+                                  return;
+                                }
+                              }
+
+                              try {
+                                Navigator.of(sheetContext).pop();
+                                communityController.submitPostReport(
+                                  post: post,
+                                  reason: selectedReason,
+                                  description: selectedReason == 'Khác'
+                                      ? noteController.text.trim()
+                                      : null,
+                                );
+                              } catch (e) {
+                                debugPrint('Error submitting report: $e');
+                                Get.snackbar(
+                                  'Lỗi',
+                                  'Không thể gửi báo cáo. Hãy thử lại sau.',
+                                  snackPosition: SnackPosition.BOTTOM,
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: alreadyReported
+                            ? const Color(0xFFCFD7E3)
+                            : const Color(0xFFE8505B),
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28.r),
+                        ),
+                        textStyle: TextStyle(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: const Text('Báo cáo'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+    ).whenComplete(() => noteController.dispose());
   }
 }
 

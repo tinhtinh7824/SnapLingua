@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
 import 'package:snaplingua/app/data/services/example_sentence_service.dart';
@@ -591,6 +592,8 @@ class CommunityController extends GetxController {
   final Rxn<FirestoreLeagueCycle> activeLeagueCycle =
       Rxn<FirestoreLeagueCycle>();
   final RxList<String> availableTopics = <String>[..._defaultTopics].obs;
+  final RxBool isPostsLoading = true.obs;
+  final RxnString postsError = RxnString();
   final RxString groupSearchQuery = ''.obs;
   final TextEditingController groupSearchController = TextEditingController();
   final RxList<CommunityJoinRequest> pendingJoinRequests =
@@ -607,6 +610,7 @@ class CommunityController extends GetxController {
   final RxSet<String> hiddenPostIds = <String>{}.obs;
   List<CommunityPost> _postCache = <CommunityPost>[];
   static const String _followStorageKey = 'community_following_ids';
+  static const String _reportedStorageKey = 'community_reported_post_ids';
 
   static const String _fallbackUserId = 'current_user_id';
   static const List<String> _defaultTopics = [
@@ -753,8 +757,38 @@ class CommunityController extends GetxController {
     groupSearchQuery.value = query;
   }
 
+  Future<T> _withFirestoreRetry<T>(
+    Future<T> Function() action, {
+    int maxAttempts = 3,
+  }) async {
+    FirebaseException? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await action();
+      } on FirebaseException catch (e) {
+        final retryable =
+            e.code == 'unavailable' || e.code == 'deadline-exceeded';
+        if (!retryable || attempt == maxAttempts) {
+          rethrow;
+        }
+        lastError = e;
+        final delayMs = 200 * math.pow(2, attempt - 1).toInt();
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+    }
+    throw lastError ??
+        FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'unknown',
+          message: 'Retry failed without error',
+        );
+  }
+
   void _bindPosts() {
     _postsSubscription?.cancel();
+    isPostsLoading.value = true;
+    postsError.value = null;
+
     _postsSubscription = _firestoreService
         .listenToCommunityPosts(
       visibility: 'public',
@@ -762,8 +796,61 @@ class CommunityController extends GetxController {
       limit: 50,
     )
         .listen(
-      (postList) => _mapFirestorePosts(postList),
+      (postList) {
+        isPostsLoading.value = false;
+        postsError.value = null;
+        _mapFirestorePosts(postList);
+      },
       onError: (error) {
+        isPostsLoading.value = false;
+        String friendlyMessage = 'Không thể tải bài viết.';
+        if (error is FirebaseException) {
+          switch (error.code) {
+            case 'permission-denied':
+              friendlyMessage =
+                  'Bạn chưa được cấp quyền xem bài viết. Vui lòng đăng nhập lại hoặc kiểm tra rules.';
+              break;
+            case 'failed-precondition':
+              friendlyMessage =
+                  'Thiếu index Firestore cho truy vấn bài viết. Đang dùng truy vấn dự phòng; hãy tạo index theo log.';
+              // Try fallback without composite index
+              Future<void>(() async {
+                try {
+                  final fallback = await _firestoreService
+                      .fetchCommunityPostsFallback(
+                    visibility: 'public',
+                    status: 'active',
+                    limit: 50,
+                  );
+                  if (fallback.isNotEmpty) {
+                    final mappedFallback = await Future.wait(
+                      fallback.map(_buildCommunityPost),
+                    );
+                    _postCache = mappedFallback;
+                    posts.assignAll(_filterHiddenPosts(mappedFallback));
+                  }
+                } catch (e) {
+                  Get.log('Fallback load posts failed: $e');
+                }
+              });
+              break;
+            case 'unavailable':
+              friendlyMessage =
+                  'Kết nối Firestore tạm thời gián đoạn. Thử lại sau.';
+              break;
+            default:
+              friendlyMessage =
+                  'Lỗi tải bài viết (${error.code}). Thử lại sau.';
+          }
+        } else if (error is Exception) {
+          friendlyMessage = error.toString();
+        }
+        postsError.value = friendlyMessage;
+        if (_postCache.isNotEmpty && posts.isEmpty) {
+          posts.assignAll(_filterHiddenPosts(_postCache));
+        } else if (_postCache.isEmpty) {
+          posts.clear();
+        }
         Get.log('Không thể tải bài viết cộng đồng: $error');
       },
     );
@@ -772,15 +859,46 @@ class CommunityController extends GetxController {
   void _mapFirestorePosts(List<FirestorePost> postList) {
     Future<void>(() async {
       try {
-        final mapped = await Future.wait(
-          postList.map(_buildCommunityPost),
-        );
-        _postCache = mapped;
-        posts.assignAll(_filterHiddenPosts(mapped));
+        final List<CommunityPost> mapped = [];
+        for (final post in postList) {
+          try {
+            final built = await _buildCommunityPost(post);
+            mapped.add(built);
+          } on FirebaseException catch (e) {
+            // Skip transient Firestore errors per post, keep trying others.
+            if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+              postsError.value ??=
+                  'Kết nối Firestore đang gián đoạn. Kéo xuống để thử lại.';
+              Get.log('Không thể chuyển đổi bài viết cộng đồng: $e');
+              continue;
+            }
+            rethrow;
+          }
+        }
+
+        if (mapped.isNotEmpty) {
+          _postCache = mapped;
+          posts.assignAll(_filterHiddenPosts(mapped));
+          postsError.value = null;
+        } else if (_postCache.isNotEmpty) {
+          posts.assignAll(_filterHiddenPosts(_postCache));
+          postsError.value ??=
+              'Không thể tải bài viết. Hiển thị dữ liệu cũ, kéo xuống để thử lại.';
+        } else {
+          posts.clear();
+          postsError.value ??=
+              'Không thể tải bài viết. Kéo xuống để thử lại.';
+        }
       } catch (e) {
         Get.log('Không thể chuyển đổi bài viết cộng đồng: $e');
+        postsError.value ??= 'Không thể tải bài viết. Kéo xuống để thử lại.';
       }
     });
+  }
+
+  Future<void> reloadPosts() async {
+    _bindPosts();
+    await Future.delayed(const Duration(milliseconds: 300));
   }
 
   void _bindGroups() {
@@ -800,7 +918,41 @@ class CommunityController extends GetxController {
         final mapped = await Future.wait(
           groupList.map(_buildCommunityGroup),
         );
-        studyGroups.assignAll(mapped);
+        final List<CommunityStudyGroup> resolvedGroups = [];
+        final List<CommunityStudyGroup> maybeEmpty = [];
+
+        for (final group in mapped) {
+          if (group.memberCount > 0) {
+            resolvedGroups.add(group);
+          } else {
+            maybeEmpty.add(group);
+          }
+        }
+
+        if (maybeEmpty.isNotEmpty) {
+          final validated = await Future.wait(
+            maybeEmpty.map(_validateAndResolveGroupMembershipCount),
+          );
+
+          for (final group in validated) {
+            if (group != null) {
+              resolvedGroups.add(group);
+            }
+          }
+
+          final confirmedEmpty = validated
+              .asMap()
+              .entries
+              .where((entry) => entry.value == null)
+              .map((entry) => maybeEmpty[entry.key])
+              .toList(growable: false);
+
+          if (confirmedEmpty.isNotEmpty) {
+            await _cleanupEmptyGroups(confirmedEmpty);
+          }
+        }
+
+        studyGroups.assignAll(resolvedGroups);
         // If the current user leads one or more groups, bind to their pending
         // member requests so they can accept/reject in-app.
         _updateLeaderPendingSubscriptions();
@@ -809,6 +961,40 @@ class CommunityController extends GetxController {
         Get.log('Không thể chuyển đổi nhóm học tập: $e');
       }
     });
+  }
+
+  Future<CommunityStudyGroup?> _validateAndResolveGroupMembershipCount(
+    CommunityStudyGroup group,
+  ) async {
+    try {
+      final members =
+          await _firestoreService.getGroupMembers(groupId: group.groupId);
+      final activeMembers = members
+          .where((member) =>
+              member.status == 'active' ||
+              member.status == 'accepted' ||
+              member.role == 'leader')
+          .length;
+      if (activeMembers > 0) {
+        return group.copyWith(memberCount: activeMembers);
+      }
+    } catch (e) {
+      Get.log('Không thể kiểm tra thành viên nhóm ${group.groupId}: $e');
+      // fall through to treat as empty so it won't appear in UI
+    }
+    return null;
+  }
+
+  Future<void> _cleanupEmptyGroups(
+    List<CommunityStudyGroup> emptyGroups,
+  ) async {
+    for (final group in emptyGroups) {
+      try {
+        await _firestoreService.deleteGroup(group.groupId);
+      } catch (e) {
+        Get.log('Không thể xoá nhóm trống ${group.groupId}: $e');
+      }
+    }
   }
 
   void _updateLeaderPendingSubscriptions() {
@@ -2159,20 +2345,24 @@ class CommunityController extends GetxController {
   }
 
   Future<CommunityPost> _buildCommunityPost(FirestorePost post) async {
-    final List<FirestorePostWord> words =
-        await _firestoreService.getPostWords(post.postId);
-    final List<FirestorePostLike> likes =
-        await _firestoreService.getPostLikes(post.postId);
-    final List<FirestorePostComment> comments =
-        await _firestoreService.getPostComments(
-      post.postId,
-      status: 'active',
-      limit: 20,
+    final List<FirestorePostWord> words = await _withFirestoreRetry(
+      () => _firestoreService.getPostWords(post.postId),
+    );
+    final List<FirestorePostLike> likes = await _withFirestoreRetry(
+      () => _firestoreService.getPostLikes(post.postId),
+    );
+    final List<FirestorePostComment> comments = await _withFirestoreRetry(
+      () => _firestoreService.getPostComments(
+        post.postId,
+        status: 'active',
+        limit: 20,
+      ),
     );
     final List<CommunityPostComment> mappedComments =
         await _mapCommentsWithUsers(comments);
 
-    final FirestoreUser? author = await _getPostAuthor(post.userId);
+    final FirestoreUser? author =
+        await _withFirestoreRetry(() => _getPostAuthor(post.userId));
     final String currentUserId = _resolveUserId();
     final bool hasLiked = currentUserId != _fallbackUserId &&
         likes.any((like) => like.userId == currentUserId);
@@ -2234,7 +2424,7 @@ class CommunityController extends GetxController {
       vocabularyItems: vocabularyItems,
       likes: likes.length,
       comments: mappedComments.length,
-      bookmarks: 0,
+      bookmarks: post.saveCount,
       isLiked: hasLiked,
       initialComments: mappedComments,
       canFollowAuthor: canFollowAuthor,
@@ -2591,6 +2781,7 @@ class CommunityController extends GetxController {
         ),
       );
       hiddenPostIds.add(post.id);
+      _persistReportedPostIds(userId, hiddenPostIds);
       _refreshFilteredPosts();
       Get.back<void>();
       Get.snackbar(
@@ -2647,8 +2838,14 @@ class CommunityController extends GetxController {
       return;
     }
     try {
+      // Load locally persisted reported posts first for offline consistency.
+      hiddenPostIds.addAll(_loadPersistedReported(userId));
+
       final ids = await _firestoreService.getUserReportedPostIds(userId);
-      hiddenPostIds.addAll(ids);
+      if (ids.isNotEmpty) {
+        hiddenPostIds.addAll(ids);
+        _persistReportedPostIds(userId, hiddenPostIds);
+      }
       _refreshFilteredPosts();
     } catch (e) {
       Get.log('Không thể tải danh sách bài đã báo cáo: $e');
@@ -3150,6 +3347,32 @@ class CommunityController extends GetxController {
     return stored
         .whereType<String>()
         .any((id) => id.trim() == authorId.trim());
+  }
+
+  Set<String> _loadPersistedReported(String userId) {
+    if (userId.isEmpty) return <String>{};
+    final stored = _storage.read<Map<dynamic, dynamic>>(_reportedStorageKey);
+    if (stored == null) return <String>{};
+    final raw = stored[userId];
+    if (raw is List) {
+      return raw.whereType<String>().toSet();
+    }
+    return <String>{};
+  }
+
+  void _persistReportedPostIds(String userId, Iterable<String> ids) {
+    if (userId.isEmpty) return;
+    final existing = _storage.read<Map<dynamic, dynamic>>(_reportedStorageKey);
+    final map = <String, List<String>>{};
+    if (existing != null) {
+      existing.forEach((key, value) {
+        if (key is String && value is List) {
+          map[key] = value.whereType<String>().toList();
+        }
+      });
+    }
+    map[userId] = ids.where((e) => e.isNotEmpty).toSet().toList();
+    _storage.write(_reportedStorageKey, map);
   }
 
   /// Mark a post as viewed for analytics/tracking purposes
@@ -3656,6 +3879,13 @@ class CommunityController extends GetxController {
         }
       } catch (e) {
         Get.log('saveVocabulary: failed to update vocabulary topic controller: $e');
+      }
+
+      try {
+        await _firestoreService.incrementPostSaveCount(post.id);
+        post.bookmarks.value = post.bookmarks.value + 1;
+      } catch (e) {
+        Get.log('Không thể cập nhật lượt lưu từ vựng cho bài viết ${post.id}: $e');
       }
     } catch (e) {
       Get.snackbar(

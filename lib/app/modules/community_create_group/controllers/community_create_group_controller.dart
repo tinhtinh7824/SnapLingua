@@ -116,6 +116,7 @@ class CommunityCreateGroupController extends GetxController {
         iconPath: iconPath,
         createdBy: userId,
         requireApproval: requireApproval,
+        initialMemberCount: 1,
       );
 
       await _firestoreService.createGroupMembership(

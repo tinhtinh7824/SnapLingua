@@ -231,6 +231,7 @@ class NotificationView extends GetView<NotificationController> {
           if (notification.imagePath != null)
             _buildNotificationImage(
               notification.imagePath!,
+              width: 70.h,
               height: 70.h,
             ),
           SizedBox(width: 12.w),
@@ -305,9 +306,9 @@ class NotificationView extends GetView<NotificationController> {
     }
 
     final isNetwork = path.startsWith('http');
-    final resolvedWidth = width ?? 50.w;
-    final resolvedHeight = height ?? 50.h;
-    final borderRadius = BorderRadius.circular(16.r);
+    final resolvedHeight = height ?? width ?? 50.h;
+    final resolvedWidth = width ?? resolvedHeight;
+    final borderRadius = BorderRadius.circular(12.r);
 
     final imageWidget = isNetwork
         ? Image.network(
@@ -348,32 +349,36 @@ class NotificationView extends GetView<NotificationController> {
   }
 
   Widget _buildPlaceholderImage(double? width, double? height) {
+    final resolvedHeight = height ?? width ?? 50.h;
+    final resolvedWidth = width ?? resolvedHeight;
     return Container(
-      width: width ?? 50.w,
-      height: height ?? 50.h,
+      width: resolvedWidth,
+      height: resolvedHeight,
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Icon(
         Icons.image,
-        size: (width ?? 50.w) * 0.5,
+        size: resolvedWidth * 0.5,
         color: Colors.grey.shade400,
       ),
     );
   }
 
   Widget _buildErrorImage(double? width, double? height) {
+    final resolvedHeight = height ?? width ?? 50.h;
+    final resolvedWidth = width ?? resolvedHeight;
     return Container(
-      width: width ?? 50.w,
-      height: height ?? 50.h,
+      width: resolvedWidth,
+      height: resolvedHeight,
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: BorderRadius.circular(12.r),
       ),
       child: Icon(
         Icons.broken_image,
-        size: (width ?? 50.w) * 0.5,
+        size: resolvedWidth * 0.5,
         color: Colors.grey.shade400,
       ),
     );

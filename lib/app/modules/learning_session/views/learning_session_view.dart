@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -357,6 +358,7 @@ class _RoundThreeContent extends StatefulWidget {
 class _RoundThreeContentState extends State<_RoundThreeContent> {
   late final PageController _pageController;
   late List<RoundThreeQuestion> _questions;
+  final AudioPlayer _sfxPlayer = AudioPlayer();
   final RxBool _canContinue = false.obs;
   int _currentIndex = 0;
   bool _retryPhase = false;
@@ -371,6 +373,7 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
     super.initState();
     _pageController = PageController();
     _questions = _buildQuestionsFromWords(widget.controller.words);
+    _sfxPlayer.setReleaseMode(ReleaseMode.stop);
   }
 
   List<RoundThreeQuestion> _buildQuestionsFromWords(List<LearningWord> words) {
@@ -440,6 +443,7 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
 
     _canContinue.value = true;
     _updatePrimaryAction(null);
+    _playFeedbackSound(isCorrect);
 
     if (isFirstAttempt) {
       _firstPassResult[wordKey] = isCorrect;
@@ -492,6 +496,18 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
     );
   }
 
+  Future<void> _playFeedbackSound(bool isCorrect) async {
+    try {
+      await _sfxPlayer.stop();
+      await _sfxPlayer.play(
+        AssetSource(isCorrect ? 'sounds/correct.wav' : 'sounds/wrong.wav'),
+        volume: 0.8,
+      );
+    } catch (e) {
+      Get.log('Play sound error: $e');
+    }
+  }
+
   void _updatePrimaryAction(VoidCallback? action) {
     if (!mounted || _primaryAction == action) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -503,6 +519,13 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
   }
 
   bool _sessionFinalized = false;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _sfxPlayer.dispose();
+    super.dispose();
+  }
 
   Future<void> _finalizeSession() async {
     if (_sessionFinalized) return;
@@ -588,14 +611,36 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
       if (realm == null) return;
       final auth = Get.isRegistered<AuthService>() ? AuthService.to : null;
       final userId = (auth != null && auth.isLoggedIn && auth.currentUserId.isNotEmpty) ? auth.currentUserId : 'guest';
-      final uv = realm
+      final now = DateTime.now();
+      final uvQuery = realm
           .all<UserVocabulary>()
           .where((e) => e.userId == userId && e.vocabularyId == vocabularyId)
           .firstOrNull;
-      if (uv == null) return;
       realm.write(() {
-        uv.status = status;
-        uv.updatedAt = DateTime.now();
+        if (uvQuery != null) {
+          uvQuery.status = status;
+          uvQuery.updatedAt = now;
+        } else {
+          final newUv = UserVocabulary(
+            now.millisecondsSinceEpoch.toString(),
+            userId,
+            vocabularyId,
+            0, // level
+            0, // repetitions
+            2.5, // easeFactor default
+            1, // interval
+            0, // correctCount
+            0, // incorrectCount
+            false, // isMastered
+            false, // isFavorite
+            status,
+            now,
+            nextReviewDate: now,
+            lastReviewedAt: null,
+            updatedAt: now,
+          );
+          realm.add(newUv);
+        }
       });
     } catch (_) {}
   }

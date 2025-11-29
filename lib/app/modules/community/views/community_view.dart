@@ -107,21 +107,48 @@ class CommunityView extends GetView<CommunityController> {
 
   Widget _buildFeed() {
     return Obx(
-      () => ListView.builder(
-        padding: EdgeInsets.only(bottom: 24.h),
-        itemCount: controller.posts.length,
-        // Performance optimization
-        cacheExtent: _listCacheExtent,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        itemBuilder: (context, index) {
-          final post = controller.posts[index];
-          return RepaintBoundary(
-            child: _FeedCard(post: post),
+      () {
+        final isLoading = controller.isPostsLoading.value;
+        final error = controller.postsError.value;
+        final posts = controller.posts;
+
+        if (isLoading) {
+          return const Center(
+            child: CircularProgressIndicator(),
           );
-        },
-      ),
+        }
+
+        return RefreshIndicator(
+          onRefresh: controller.reloadPosts,
+          child: posts.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(height: 80.h),
+                    _EmptyFeedState(
+                      message: error ??
+                          'Chưa cập nhật được dữ liệu, hãy thử tải lại nhé!',
+                      onRetry: controller.reloadPosts,
+                      isError: error != null,
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.only(bottom: 24.h),
+                  itemCount: posts.length,
+                  cacheExtent: _listCacheExtent,
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  itemBuilder: (context, index) {
+                    final post = posts[index];
+                    return RepaintBoundary(
+                      child: _FeedCard(post: post),
+                    );
+                  },
+                ),
+        );
+      },
     );
   }
 
@@ -131,6 +158,74 @@ class CommunityView extends GetView<CommunityController> {
 
   Widget _buildLeaderboard() {
     return CommunityLeaderboardView(controller: controller);
+  }
+}
+
+class _EmptyFeedState extends StatelessWidget {
+  const _EmptyFeedState({
+    required this.message,
+    required this.onRetry,
+    this.isError = false,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (isError)
+          Icon(
+            Icons.wifi_off_rounded,
+            size: 48.w,
+            color: const Color(0xFF0A69C7),
+          )
+        else
+          Image.asset(
+            'assets/images/chimcanhcut/chim_xinloi.png',
+            width: 150.w,
+            
+          ),
+        SizedBox(height: 16.h),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24.w),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14.sp,
+              color: const Color(0xFF1A1D1F),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        SizedBox(height: 16.h),
+        ElevatedButton(
+          onPressed: onRetry,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0A69C7),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14.r),
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            child: Text(
+              isError ? 'Thử lại' : 'Tải mới',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

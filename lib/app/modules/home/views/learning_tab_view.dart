@@ -273,34 +273,12 @@ class LearningTabView extends GetView<HomeStatsController> {
       final learned = progressCtrl.newLearned.value;
       final remaining = math.max(0, target - learned);
       if (remaining <= 0) {
-        Get.snackbar(
-          'Bạn đã đạt mục tiêu',
-          'Hôm nay bạn đã hoàn thành số từ mới theo mục tiêu.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
+        await _showPostGoalDialog();
         return;
       }
 
       final takeCount = math.min(10, remaining);
-      final deck = await _buildNewLearningDeck(takeCount);
-      if (deck.isEmpty) {
-        Get.log('LearningTab: Không tìm thấy từ vựng nào để học', isError: true);
-        Get.snackbar(
-          'Không có từ mới',
-          'Kho từ vựng hiện trống hoặc chưa được tải.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return;
-      }
-
-      Get.toNamed(
-        Routes.learningSession,
-        arguments: LearningSessionArguments(
-          words: deck,
-          round: LearningSessionController.roundLearning,
-          sessionType: 'new_learning',
-        ),
-      );
+      await _startNewLearningSession(takeCount);
     } catch (e, stack) {
       Get.log('LearningTab: Lỗi khi bắt đầu học từ mới - $e', isError: true);
       Get.log(stack.toString(), isError: true);
@@ -339,6 +317,150 @@ class LearningTabView extends GetView<HomeStatsController> {
         isLeech: false,
       );
     }).toList();
+  }
+
+  Future<void> _startNewLearningSession(int takeCount) async {
+    final deck = await _buildNewLearningDeck(takeCount);
+    if (deck.isEmpty) {
+      Get.log('LearningTab: Không tìm thấy từ vựng nào để học', isError: true);
+      Get.snackbar(
+        'Không có từ mới',
+        'Kho từ vựng hiện trống hoặc chưa được tải.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    Get.toNamed(
+      Routes.learningSession,
+      arguments: LearningSessionArguments(
+        words: deck,
+        round: LearningSessionController.roundLearning,
+        sessionType: 'new_learning',
+      ),
+    );
+  }
+
+  Future<void> _showPostGoalDialog() async {
+    final selection = await Get.dialog<String>(
+      Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: 20.w),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60.w,
+                height: 60.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1CB0F6), Color(0xFF02D099)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.celebration_outlined,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'Bạn đã đạt mục tiêu hôm nay!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 10.h),
+              Text(
+                'Bạn muốn ôn tập ngay hay tiếp tục học thêm 10 từ mới?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  color: Colors.grey[700],
+                ),
+              ),
+              SizedBox(height: 20.h),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(result: 'review'),
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 12.h),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14.r),
+                        ),
+                        side: const BorderSide(color: Color(0xFF1CB0F6)),
+                        foregroundColor: const Color(0xFF1CB0F6),
+                        textStyle: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.sp,
+                        ),
+                      ),
+                      child: const Text('Ôn tập ngay'),
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14.r),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF3D8EF7), Color(0xFF1CB0F6)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF1CB0F6).withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextButton(
+                        onPressed: () => Get.back(result: 'learn_more'),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12.h),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14.r),
+                          ),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          'Học thêm 10 từ mới',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14.sp,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: true,
+    );
+
+    if (selection == 'learn_more') {
+      await _startNewLearningSession(10);
+    } else if (selection == 'review') {
+      await _handleReviewTap();
+    }
   }
 
   Future<void> _handleReviewTap() async {

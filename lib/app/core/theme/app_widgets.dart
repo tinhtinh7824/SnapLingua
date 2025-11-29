@@ -413,4 +413,68 @@ class AppWidgets {
       barrierDismissible: false,
     );
   }
+
+  /// Show a branded loading overlay with mascot image and message.
+  ///
+  /// Call `Get.back()` to close when loading completes.
+  static Future<void> showLoadingOverlay({
+    String message = 'Đang tải dữ liệu, vui lòng đợi...',
+  }) async {
+    // Avoid stacking multiple loading dialogs.
+    if (Get.isDialogOpen == true) {
+      Get.back<void>();
+    }
+
+    await Get.dialog(
+      WillPopScope(
+        onWillPop: () async => false,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/chimcanhcut/chim_ngu.png',
+                  width: 96,
+                  height: 96,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 14),
+                const CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation(Color(0xFF0A69C7)),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF395067),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.15),
+    );
+  }
 }
