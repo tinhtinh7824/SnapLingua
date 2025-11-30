@@ -1610,6 +1610,24 @@ class CommunityController extends GetxController {
     }
   }
 
+  /// Clear cached XP breakdowns so the next refresh reads fresh data.
+  void clearXpBreakdownCache() {
+    _xpBreakdownCache.clear();
+  }
+
+  /// Refresh the currently joined group details (XP, members) from Firestore.
+  Future<void> refreshJoinedGroupDetails() async {
+    final details = joinedGroupDetails.value;
+    if (details == null) return;
+    try {
+      final refreshed =
+          await _buildGroupDetailsFromFirestore(details.group);
+      joinedGroupDetails.value = refreshed;
+    } catch (e) {
+      Get.log('Không thể làm mới nhóm đã tham gia: $e');
+    }
+  }
+
   void _cleanupPhotoCache() {
     if (_photoCache.length > _maxPhotoCacheSize) {
       final keysToRemove = _photoCache.keys.take(_photoCache.length - _maxPhotoCacheSize);

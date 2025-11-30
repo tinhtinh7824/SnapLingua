@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
@@ -515,15 +517,16 @@ class LearningSessionController extends GetxController {
       } else if (clampedAmount > 0 &&
           userId != 'guest' &&
           Get.isRegistered<FirestoreService>()) {
-        await FirestoreService.to.addXpTransaction(
+        // Fire-and-forget fallback to avoid blocking UI when DailyProgressService is unavailable.
+        unawaited(FirestoreService.to.applyXp(
           userId: userId,
+          amount: clampedAmount,
           sourceType: sourceType,
           action: action,
           sourceId: sourceId,
-          amount: clampedAmount,
           metadata: metadata,
           wordsCount: wordsCount,
-        );
+        ));
       }
 
       if (appliedXp > 0) {

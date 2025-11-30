@@ -429,59 +429,91 @@ class NotificationController extends GetxController {
           updated.add(n);
           continue;
         }
-        String? resolvedImage;
-
-        // Try cached posts first
-        final cachedPost = _postCache[n.postId];
-        if (cachedPost != null && cachedPost.imageUrl.isNotEmpty) {
-          updated.add(n.copyWith(imagePath: cachedPost.imageUrl));
-          continue;
-        }
-
-        // 1) Try cached posts already loaded in CommunityController
-        if (Get.isRegistered<CommunityController>() &&
-            n.postId != null &&
-            n.postId!.isNotEmpty) {
-          final post = Get.find<CommunityController>()
-              .posts
-              .firstWhereOrNull((p) => p.id == n.postId);
-          if (post != null && post.imageUrl.isNotEmpty) {
-            resolvedImage = post.imageUrl;
-          }
-        }
-
-        // Try photoId first if present
-        if ((resolvedImage == null || resolvedImage.isEmpty) &&
-            n.postPhotoId != null &&
-            n.postPhotoId!.isNotEmpty) {
-          resolvedImage = await _resolvePhotoById(n.postPhotoId);
-        }
-        // Next, try fetching the post to read photoUrl/photoId
-        if ((resolvedImage == null || resolvedImage.isEmpty) &&
-            n.postId != null &&
-            n.postId!.isNotEmpty) {
-          try {
-            final post = await _firestore?.getPostById(n.postId!);
-            resolvedImage = post?.photoUrl;
-            if ((resolvedImage == null || resolvedImage.isEmpty) &&
-                post?.photoId != null &&
-                post!.photoId!.isNotEmpty) {
-              resolvedImage = await _resolvePhotoById(post.photoId!);
-            }
-          } catch (_) {}
-        }
-
+        final resolvedImage = await _resolveNotificationImage(n);
         if (resolvedImage == null || resolvedImage.isEmpty) {
           updated.add(n);
-          continue;
+        } else {
+          updated.add(n.copyWith(imagePath: resolvedImage));
         }
-
-        updated.add(n.copyWith(imagePath: resolvedImage));
       }
       notifications.assignAll(updated);
     } catch (_) {
       // Ignore hydration errors to avoid breaking UI
     }
+  }
+
+  Future<String?> _resolveNotificationImage(NotificationItem n) async {
+    // 1) Cached post from local map
+    final cachedPost = _postCache[n.postId];
+    if (cachedPost != null && cachedPost.imageUrl.isNotEmpty) {
+      return cachedPost.imageUrl;
+    }
+
+    // 2) Posts already loaded in CommunityController
+    if (Get.isRegistered<CommunityController>() &&
+        n.postId != null &&
+        n.postId!.isNotEmpty) {
+      final post = Get.find<CommunityController>()
+          .posts
+          .firstWhereOrNull((p) => p.id == n.postId);
+      if (post != null) {
+        if (post.imageUrl.isNotEmpty) {
+          _cachePost(post);
+          return post.imageUrl;
+        }
+        // Try resolving via photoId if present on cached post
+        if (post.photoId != null && post.photoId!.isNotEmpty) {
+          final resolved = await _resolvePhotoById(post.photoId);
+          if (resolved != null && resolved.isNotEmpty) {
+            return resolved;
+          }
+        }
+      }
+    }
+
+    // 3) Try photoId from notification payload
+    if (n.postPhotoId != null && n.postPhotoId!.isNotEmpty) {
+      final resolved = await _resolvePhotoById(n.postPhotoId);
+      if (resolved != null && resolved.isNotEmpty) {
+        return resolved;
+      }
+    }
+
+    // 4) Fetch post from Firestore to get photoUrl/photoId
+    if (n.postId != null && n.postId!.isNotEmpty) {
+      try {
+        final post = await _firestore?.getPostById(n.postId!);
+        if (post != null) {
+          final image = post.photoUrl;
+          _cachePost(
+            CommunityPost(
+              id: post.postId,
+              authorId: post.userId,
+              authorName: '',
+              authorAvatar: '',
+              postedAt: post.createdAt.toIso8601String(),
+              imageUrl: image,
+              photoId: post.photoId,
+              vocabularyItems: const [],
+              likes: 0,
+              comments: 0,
+              bookmarks: 0,
+            ),
+          );
+          if (image.isNotEmpty) {
+            return image;
+          }
+          if (post.photoId != null && post.photoId!.isNotEmpty) {
+            final resolved = await _resolvePhotoById(post.photoId);
+            if (resolved != null && resolved.isNotEmpty) {
+              return resolved;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
   }
 
   String _resolveTitle(

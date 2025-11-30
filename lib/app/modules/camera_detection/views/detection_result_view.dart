@@ -501,11 +501,11 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       });
 
       if (userId != 'guest') {
-        await FirestoreService.to.addXpTransaction(
+        await FirestoreService.to.applyXp(
           userId: userId,
+          amount: amount,
           sourceType: 'camera',
           action: action,
-          amount: amount,
           wordsCount: wordsCount,
           metadata: {
             'words_saved': wordsCount,

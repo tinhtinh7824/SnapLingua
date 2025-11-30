@@ -15,6 +15,8 @@ import '../../modules/home/controllers/learning_tab_controller.dart'
     as learning_tab;
 import '../../modules/community/controllers/community_controller.dart'
     as community;
+import '../../modules/profile/controllers/profile_controller.dart'
+    as profile;
 
 const int _kDailyXpCap = 500;
 
@@ -117,6 +119,31 @@ class DailyProgressService extends GetxService {
 
     if (update.appliedXp > 0) {
       await _notifyXpEarned(userId, update.appliedXp);
+
+      // Trigger UI refresh for XP-dependent views (profile, leaderboard, home stats).
+      if (Get.isRegistered<home_stats.HomeStatsController>()) {
+        try {
+          await Get.find<home_stats.HomeStatsController>().load();
+        } catch (_) {}
+      }
+      if (Get.isRegistered<profile.ProfileController>()) {
+        try {
+          await profile.ProfileController.to.loadProfile();
+        } catch (_) {}
+      }
+      if (Get.isRegistered<community.CommunityController>()) {
+        try {
+          final communityController = Get.find<community.CommunityController>();
+          communityController.clearXpBreakdownCache();
+          await communityController.refreshLeaderboard();
+          await communityController.refreshJoinedGroupDetails();
+        } catch (_) {}
+      }
+      if (Get.isRegistered<learning_tab.LearningTabController>()) {
+        try {
+          await Get.find<learning_tab.LearningTabController>().refreshProgress();
+        } catch (_) {}
+      }
     }
 
     return update.appliedXp;
@@ -535,12 +562,12 @@ class DailyProgressService extends GetxService {
     if (!Get.isRegistered<FirestoreService>()) return;
 
     try {
-      await FirestoreService.to.addXpTransaction(
+      await FirestoreService.to.applyXp(
         userId: userId,
+        amount: amount,
         sourceType: sourceType,
         action: action,
         sourceId: sourceId,
-        amount: amount,
         metadata: metadata,
         wordsCount: wordsCount,
         occurredAt: occurredAt ?? DateTime.now(),

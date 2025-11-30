@@ -1330,6 +1330,93 @@ class FirestoreService extends GetxService {
     return 'Family topic seeded with ${entries.length} words';
   }
 
+  /// Apply XP to user + leaderboard + transaction atomically and return applied amount.
+  Future<int> applyXp({
+    required String userId,
+    required int amount,
+    required String sourceType,
+    required String action,
+    Map<String, dynamic>? metadata,
+    String? note,
+    int? wordsCount,
+    String? sourceId,
+    DateTime? occurredAt,
+  }) async {
+    if (userId.isEmpty || amount <= 0) return 0;
+
+    // Fetch active league cycle outside the transaction (queries are not allowed inside).
+    final activeCycleId = await _getActiveLeagueCycleId();
+
+    return _firestore.runTransaction<int>((transaction) async {
+      final now = occurredAt ?? DateTime.now();
+      final tsNow = Timestamp.fromDate(now);
+
+      // 1) Increment user lifetime XP
+      final userRef = _users.doc(userId);
+      transaction.set(userRef, {
+        'lifetime_xp': FieldValue.increment(amount),
+        'updatedAt': tsNow,
+      }, SetOptions(merge: true));
+
+      // 2) Upsert league member weekly XP (if active cycle exists)
+      if (activeCycleId != null && activeCycleId.isNotEmpty) {
+        final memberId = '${activeCycleId}_$userId';
+        final memberRef = _leagueMembers.doc(memberId);
+        final memberSnap = await transaction.get(memberRef);
+        if (memberSnap.exists && memberSnap.data() != null) {
+          transaction.update(memberRef, {
+            'weekly_xp': FieldValue.increment(amount),
+            'updated_at': tsNow,
+          });
+        } else {
+          transaction.set(memberRef, {
+            'cycle_id': activeCycleId,
+            'user_id': userId,
+            'weekly_xp': amount,
+            'created_at': tsNow,
+            'updated_at': tsNow,
+            'rank': null,
+            'promoted': false,
+            'demoted': false,
+            'is_virtual': false,
+          });
+        }
+      }
+
+      // 3) Record XP transaction
+      final txnRef = _xpTransactions.doc();
+      final txn = FirestoreXpTransaction(
+        transactionId: txnRef.id,
+        userId: userId,
+        sourceType: sourceType,
+        action: action,
+        sourceId: sourceId,
+        amount: amount,
+        note: note,
+        metadata: metadata,
+        wordsCount: wordsCount,
+        createdAt: now,
+      );
+      transaction.set(txnRef, txn.toMap());
+
+      return amount;
+    });
+  }
+
+  Future<String?> _getActiveLeagueCycleId() async {
+    try {
+      final snapshot = await _leagueCycles
+          .where('is_active', isEqualTo: true)
+          .orderBy('created_at', descending: true)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return snapshot.docs.first.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String> seedClothingTopic() async {
     const topicId = 'topic_clothing';
     final now = Timestamp.fromDate(DateTime.now());
@@ -1701,12 +1788,66 @@ class FirestoreService extends GetxService {
     DateTime? startAt,
     DateTime? endAt,
   }) async {
-    // Stub implementation - return default breakdown
-    return UserXpBreakdown(
-      total: 0,
-      bySource: <String, int>{},
-      activeDays: 0,
-    );
+    if (userId.isEmpty) {
+      return UserXpBreakdown(
+        total: 0,
+        bySource: <String, int>{},
+        activeDays: 0,
+      );
+    }
+
+    try {
+      var query = _xpTransactions.where('user_id', isEqualTo: userId);
+      if (startAt != null) {
+        query = query.where(
+          'created_at',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startAt),
+        );
+      }
+      if (endAt != null) {
+        query = query.where(
+          'created_at',
+          isLessThanOrEqualTo: Timestamp.fromDate(endAt),
+        );
+      }
+
+      final snapshot = await query.get();
+      if (snapshot.docs.isEmpty) {
+        return UserXpBreakdown(
+          total: 0,
+          bySource: <String, int>{},
+          activeDays: 0,
+        );
+      }
+
+      final Map<String, int> bySource = {};
+      final Set<String> activeDates = {};
+      int total = 0;
+
+      for (final doc in snapshot.docs) {
+        final txn = FirestoreXpTransaction.fromSnapshot(doc);
+        total += txn.amount;
+        bySource.update(txn.sourceType, (v) => v + txn.amount,
+            ifAbsent: () => txn.amount);
+
+        final d = txn.createdAt;
+        final key =
+            '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        activeDates.add(key);
+      }
+
+      return UserXpBreakdown(
+        total: total,
+        bySource: bySource,
+        activeDays: activeDates.length,
+      );
+    } catch (_) {
+      return UserXpBreakdown(
+        total: 0,
+        bySource: <String, int>{},
+        activeDays: 0,
+      );
+    }
   }
 
   Stream<List<FirestoreXpTransaction>> listenToUserXpTransactions({
