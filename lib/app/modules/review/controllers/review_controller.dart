@@ -246,6 +246,7 @@ class ReviewController extends GetxController {
 
     final authService = Get.find<AuthService>();
     final userId = authService.isLoggedIn ? authService.currentUserId : '';
+    final isUserLoggedIn = authService.isLoggedIn && userId.isNotEmpty;
 
     final categoryResults = realmInstance.all<Category>();
     final Map<String, Category> categoryByName = {
@@ -257,10 +258,50 @@ class ReviewController extends GetxController {
           entry.key: entry.value.iconUrl!,
     };
 
-    // More efficient query using filter instead of iteration
-    final vocabularies = realmInstance
-        .query<Vocabulary>('isActive == true')
-        .toList();
+    // Load only the vocabulary linked to the current user to avoid leaking
+    // another user's library. Fall back to all active vocabulary for guests.
+    Iterable<UserVocabulary> userVocabulary = const [];
+    if (isUserLoggedIn) {
+      userVocabulary = realmInstance.query<UserVocabulary>(
+        'userId == \$0',
+        [userId],
+      );
+
+      // Seed the library for first-time users before continuing.
+      final shouldHydrate = userVocabulary.isEmpty &&
+          !skipHydration &&
+          Get.isRegistered<VocabularyService>();
+      if (shouldHydrate) {
+        try {
+          final hydrated = await VocabularyService.to.hydrateUserLibrary(
+            userId: userId,
+          );
+          if (hydrated) {
+            await loadCategories(skipHydration: true);
+            return;
+          }
+        } catch (e) {
+          Get.log('Hydrate vocabulary failed: $e');
+        }
+      }
+    }
+
+    final Iterable<Vocabulary> vocabularies;
+    if (isUserLoggedIn) {
+      final vocabIds = userVocabulary.map((uv) => uv.vocabularyId).toSet();
+      if (vocabIds.isEmpty) {
+        vocabularies = const [];
+      } else {
+        vocabularies = realmInstance
+            .query<Vocabulary>('id IN \$0 AND isActive == true', [vocabIds.toList()])
+            .toList();
+      }
+    } else {
+      vocabularies = realmInstance
+          .query<Vocabulary>('isActive == true')
+          .toList();
+    }
+
     final Map<String, List<Vocabulary>> grouped = {};
     for (final vocab in vocabularies) {
       final categoryName = vocab.category.isNotEmpty ? vocab.category : 'Khác';
@@ -290,27 +331,8 @@ class ReviewController extends GetxController {
     // If there are no vocabularies grouped by category but there are
     // category records present in Realm (e.g. user just created a new
     // empty category), we still want to surface those categories in the
-    // UI. Only run hydration/clear when there are no category records at
-    // all.
+    // UI.
     if (grouped.isEmpty && categoryByName.isEmpty) {
-      final shouldHydrate = !skipHydration &&
-          authService.isLoggedIn &&
-          authService.currentUserId.isNotEmpty &&
-          Get.isRegistered<VocabularyService>();
-      if (shouldHydrate) {
-        try {
-          final hydrated = await VocabularyService.to.hydrateUserLibrary(
-            userId: authService.currentUserId,
-          );
-          if (hydrated) {
-            await loadCategories(skipHydration: true);
-            return;
-          }
-        } catch (e) {
-          Get.log('Hydrate vocabulary failed: $e');
-        }
-      }
-
       categories.clear();
       filteredCategories.clear();
       searchResults.clear();
@@ -434,7 +456,11 @@ class ReviewController extends GetxController {
         topicId: topic.topicId,
       );
 
-      await _persistTopicToRealm(summary.topic, summary.words);
+      await _persistTopicToRealm(
+        userId: authService.currentUserId,
+        topic: summary.topic,
+        words: summary.words,
+      );
       await loadCategories();
       recommendedTopics.refresh();
 
@@ -464,10 +490,11 @@ class ReviewController extends GetxController {
     }
   }
 
-  Future<void> _persistTopicToRealm(
-    FirestoreTopic topic,
-    List<FirestoreDictionaryWord> words,
-  ) async {
+  Future<void> _persistTopicToRealm({
+    required String userId,
+    required FirestoreTopic topic,
+    required List<FirestoreDictionaryWord> words,
+  }) async {
     final realmInstance = RealmService.to.realm;
     if (realmInstance == null) return;
 
@@ -520,6 +547,35 @@ class ReviewController extends GetxController {
               phonetic: word.ipa,
               example: word.exampleEn,
               translation: word.meaningVi,
+            ),
+          );
+        }
+
+        // Ensure the user has a UserVocabulary record linked to this word.
+        final existingUserVocab = realmInstance.query<UserVocabulary>(
+          'userId == \$0 AND vocabularyId == \$1',
+          [userId, word.wordId],
+        );
+        if (existingUserVocab.isEmpty) {
+          final userVocabId = '${userId}_${word.wordId}';
+          realmInstance.add(
+            UserVocabulary(
+              userVocabId,
+              userId,
+              word.wordId,
+              0, // level
+              0, // repetitions
+              2.5, // easeFactor
+              1, // interval
+              0, // correctCount
+              0, // incorrectCount
+              false, // isMastered
+              false, // isFavorite
+              VocabularyService.statusNotStarted,
+              now,
+              nextReviewDate: now.add(const Duration(days: 1)),
+              lastReviewedAt: null,
+              updatedAt: now,
             ),
           );
         }
