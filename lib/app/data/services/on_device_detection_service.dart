@@ -7,10 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
-/// On-device YOLOv8n detector using a TFLite model packaged in assets.
+/// On-device YOLO detector using a TFLite model packaged in assets.
 ///
 /// Expectations:
-/// - Model file: YOLOv8n float16 TFLite model at `assets/ml_models/yolov8n_float16.tflite`
+/// - Model file: YOLO11n float32 TFLite model at `assets/ml_models/yolo11n_float32.tflite`
 /// - Label file: COCO class names at `assets/ml_models/labels.txt`
 /// - Model output shape: `[1, N, 84]` (cx, cy, w, h, obj, class scores...)
 /// Adjust constants below if your export differs.
@@ -18,13 +18,19 @@ class OnDeviceDetectionService {
   OnDeviceDetectionService._();
   static final OnDeviceDetectionService instance = OnDeviceDetectionService._();
 
-  static const _modelAsset = 'assets/ml_models/yolov8n_float32.tflite';
+  // Try the preferred YOLO11n float32 first, then fall back to float16, then older YOLOv8.
+  static const _modelCandidates = [
+    'assets/ml_models/yolo11n_float32.tflite',
+    'assets/ml_models/yolo11n_float16.tflite',
+    'assets/ml_models/yolov8n_float32.tflite',
+  ];
   static const _labelsAsset = 'assets/ml_models/labels.txt';
   static const _confidenceThreshold = 0.35;
   static const _iouThreshold = 0.45;
 
   Interpreter? _interpreter;
   List<String>? _labels;
+  String? _loadedModelAsset;
 
   Future<void> _ensureLoaded() async {
     if (_interpreter != null && _labels != null) return;
@@ -32,17 +38,23 @@ class OnDeviceDetectionService {
     // Load labels first (always available)
     _labels ??= await _loadLabels();
 
-    // Try to load model, but don't fail if not available
-    if (await _assetExists(_modelAsset)) {
+    // Try to load the first available model in priority order.
+    for (final candidate in _modelCandidates) {
+      final exists = await _assetExists(candidate);
+      if (!exists) continue;
       try {
-        final modelBytes = await rootBundle.load(_modelAsset);
+        final modelBytes = await rootBundle.load(candidate);
         _interpreter ??= Interpreter.fromBuffer(modelBytes.buffer.asUint8List());
-        print('✅ YOLOv8n TFLite model loaded successfully');
+        _loadedModelAsset = candidate;
+        print('✅ YOLO TFLite model loaded: $candidate');
+        break;
       } catch (e) {
-        print('⚠️ TFLite model load failed, will use demo mode: $e');
+        print('⚠️ TFLite model load failed for $candidate: $e');
       }
-    } else {
-      print('⚠️ TFLite model not found, using demo mode');
+    }
+
+    if (_interpreter == null) {
+      print('⚠️ No TFLite model loaded (demo mode). Add assets/ml_models/yolo11n_float32.tflite');
     }
   }
 
@@ -92,7 +104,7 @@ class OnDeviceDetectionService {
 
     // If no interpreter loaded, use demo mode
     if (_interpreter == null) {
-      print('🎭 OnDevice detector using demo mode');
+      print('🎭 OnDevice detector using demo mode (no TFLite model loaded)');
       return DetectionResult(
         detections: _getDemoDetections(),
         annotatedImagePath: imageFile.path,

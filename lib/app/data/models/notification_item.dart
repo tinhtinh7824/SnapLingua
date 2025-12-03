@@ -22,6 +22,7 @@ class NotificationItem {
   final String? postId; // post to open (for likes/comments)
   final String? postPhotoId; // photo id for the post
   final int? streakCount; // streak milestone
+  final Map<String, dynamic>? payload; // raw payload for deeper hydration
 
   NotificationItem({
     required this.id,
@@ -38,6 +39,7 @@ class NotificationItem {
     this.postId,
     this.postPhotoId,
     this.streakCount,
+    this.payload,
   });
 
   // Format date as dd/MM/yyyy
@@ -60,6 +62,7 @@ class NotificationItem {
     String? postId,
     String? postPhotoId,
     int? streakCount,
+    Map<String, dynamic>? payload,
   }) {
     return NotificationItem(
       id: id ?? this.id,
@@ -76,6 +79,7 @@ class NotificationItem {
       postId: postId ?? this.postId,
       postPhotoId: postPhotoId ?? this.postPhotoId,
       streakCount: streakCount ?? this.streakCount,
+      payload: payload ?? this.payload,
     );
   }
 }

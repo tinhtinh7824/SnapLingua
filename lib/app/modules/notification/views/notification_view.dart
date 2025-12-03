@@ -151,6 +151,8 @@ class NotificationView extends GetView<NotificationController> {
   }
 
   Widget _buildFollowCard(NotificationItem notification) {
+    final imagePath = _resolveImagePath(notification);
+    final fallbackAsset = _fallbackAsset(notification);
     return Container(
       padding: EdgeInsets.all(16.w),
       decoration: AppWidgets.questGradientDecoration(),
@@ -160,9 +162,10 @@ class NotificationView extends GetView<NotificationController> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (notification.imagePath != null)
+              if (imagePath != null)
                 _buildNotificationImage(
-                  notification.imagePath!,
+                  imagePath,
+                  fallbackPath: fallbackAsset,
                   width: 43.w,
                   height: 43.h,
                 ),
@@ -222,15 +225,18 @@ class NotificationView extends GetView<NotificationController> {
   }
 
   Widget _buildDefaultCard(NotificationItem notification) {
+    final imagePath = _resolveImagePath(notification);
+    final fallbackAsset = _fallbackAsset(notification);
     return Container(
       padding: EdgeInsets.all(12.w),
       decoration: AppWidgets.questGradientDecoration(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (notification.imagePath != null)
+          if (imagePath != null)
             _buildNotificationImage(
-              notification.imagePath!,
+              imagePath,
+              fallbackPath: fallbackAsset,
               width: 70.h,
               height: 70.h,
             ),
@@ -297,11 +303,19 @@ class NotificationView extends GetView<NotificationController> {
 
   Widget _buildNotificationImage(
     String path, {
+    String? fallbackPath,
     double? width,
     double? height,
   }) {
     // Safety check for empty path
     if (path.trim().isEmpty) {
+      if (fallbackPath != null && fallbackPath.trim().isNotEmpty) {
+        return _buildNotificationImage(
+          fallbackPath,
+          width: width,
+          height: height,
+        );
+      }
       return _buildPlaceholderImage(width, height);
     }
 
@@ -332,14 +346,26 @@ class NotificationView extends GetView<NotificationController> {
                 ),
               );
             },
-            errorBuilder: (_, __, ___) => _buildErrorImage(width, height),
+            errorBuilder: (_, __, ___) => fallbackPath != null
+                ? _buildNotificationImage(
+                    fallbackPath,
+                    width: width,
+                    height: height,
+                  )
+                : _buildErrorImage(width, height),
           )
         : Image.asset(
             path,
             width: resolvedWidth,
             height: resolvedHeight,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildErrorImage(width, height),
+            errorBuilder: (_, __, ___) => fallbackPath != null
+                ? _buildNotificationImage(
+                    fallbackPath,
+                    width: width,
+                    height: height,
+                  )
+                : _buildErrorImage(width, height),
           );
 
     return ClipRRect(
@@ -382,5 +408,28 @@ class NotificationView extends GetView<NotificationController> {
         color: Colors.grey.shade400,
       ),
     );
+  }
+
+  String? _resolveImagePath(NotificationItem notification) {
+    final path = notification.imagePath;
+    if (path != null && path.trim().isNotEmpty) {
+      return path;
+    }
+    final fallback = _fallbackAsset(notification);
+    if (fallback != null && fallback.trim().isNotEmpty) return fallback;
+    return null;
+  }
+
+  String? _fallbackAsset(NotificationItem notification) {
+    if (notification.type == NotificationType.follow) {
+      return 'assets/images/chimcanhcut/chim_xinchao.png';
+    }
+    if (notification.type == NotificationType.postReaction) {
+      return 'assets/images/chimcanhcut/chim_yeu.png';
+    }
+    if (notification.type == NotificationType.postComment) {
+      return 'assets/images/chimcanhcut/chim_hocnhom.png';
+    }
+    return null;
   }
 }

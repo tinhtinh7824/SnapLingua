@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:snaplingua/app/modules/community_detail/bindings/community_detail_binding.dart';
@@ -28,9 +29,12 @@ class NotificationController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _auth = Get.isRegistered<AuthService>() ? Get.find<AuthService>() : null;
-    _firestore =
-        Get.isRegistered<FirestoreService>() ? FirestoreService.to : null;
+    _auth = Get.isRegistered<AuthService>()
+        ? Get.find<AuthService>()
+        : Get.put(AuthService(), permanent: true);
+    _firestore = Get.isRegistered<FirestoreService>()
+        ? FirestoreService.to
+        : Get.put(FirestoreService(), permanent: true);
     loadNotifications();
   }
 
@@ -193,6 +197,12 @@ class NotificationController extends GetxController {
           hasAction: notification.hasAction,
           actionText: notification.actionText,
           isRead: true,
+          actorId: notification.actorId,
+          targetUserId: notification.targetUserId,
+          postId: notification.postId,
+          postPhotoId: notification.postPhotoId,
+          streakCount: notification.streakCount,
+          payload: notification.payload,
         );
 
         // Update the list
@@ -230,6 +240,8 @@ class NotificationController extends GetxController {
             targetUserId: notification.targetUserId,
             postId: notification.postId,
             streakCount: notification.streakCount,
+            postPhotoId: notification.postPhotoId,
+            payload: notification.payload,
           );
         }
         return notification;
@@ -287,14 +299,11 @@ class NotificationController extends GetxController {
       streakCount: streakCount,
     );
     final subtitle = payload['subtitle'] as String?;
-    final imagePath = (payload['postImage'] ??
-            payload['postThumbnail'] ??
-            payload['photoUrl'] ??
-            payload['imagePath'] ??
-            payload['image_url'] ??
-            payload['thumbnail']) as String?;
+    final imagePath = _extractImageFromPayload(payload);
     final actionText = payload['actionText'] as String?;
     final hasAction = payload['hasAction'] as bool? ?? false;
+    final postId = _extractPostId(payload);
+    final postPhotoId = _extractPhotoId(payload);
 
     return NotificationItem(
       id: raw.notificationId,
@@ -309,10 +318,10 @@ class NotificationController extends GetxController {
       actorId: payload['actorId'] as String?,
       targetUserId: (payload['profileUserId'] as String?) ??
           (payload['targetUserId'] as String?),
-      postId: payload['postId'] as String? ?? payload['post_id'] as String?,
-      postPhotoId:
-          payload['photoId'] as String? ?? payload['photo_id'] as String?,
+      postId: postId,
+      postPhotoId: postPhotoId,
       streakCount: streakCount,
+      payload: payload,
     );
   }
 
@@ -425,16 +434,10 @@ class NotificationController extends GetxController {
     try {
       final updated = <NotificationItem>[];
       for (final n in notifications) {
-        if (n.imagePath != null && n.imagePath!.trim().isNotEmpty) {
-          updated.add(n);
-          continue;
-        }
         final resolvedImage = await _resolveNotificationImage(n);
-        if (resolvedImage == null || resolvedImage.isEmpty) {
-          updated.add(n);
-        } else {
-          updated.add(n.copyWith(imagePath: resolvedImage));
-        }
+        final nextImage =
+            (resolvedImage != null && resolvedImage.isNotEmpty) ? resolvedImage : n.imagePath;
+        updated.add(n.copyWith(imagePath: nextImage));
       }
       notifications.assignAll(updated);
     } catch (_) {
@@ -443,6 +446,20 @@ class NotificationController extends GetxController {
   }
 
   Future<String?> _resolveNotificationImage(NotificationItem n) async {
+    // Fallback assets when we cannot resolve the post image
+    String? fallback;
+    if (n.type == NotificationType.postReaction) {
+      fallback = 'assets/images/chimcanhcut/chim_yeu.png';
+    } else if (n.type == NotificationType.postComment) {
+      fallback = 'assets/images/chimcanhcut/chim_hocnhom.png';
+    }
+
+    // 0) Image baked into notification payload / raw payload
+    final payloadImage = _extractImageFromPayload(n.payload ?? const {});
+    if (payloadImage != null && payloadImage.isNotEmpty) {
+      return payloadImage;
+    }
+
     // 1) Cached post from local map
     final cachedPost = _postCache[n.postId];
     if (cachedPost != null && cachedPost.imageUrl.isNotEmpty) {
@@ -513,7 +530,122 @@ class NotificationController extends GetxController {
       } catch (_) {}
     }
 
+    return fallback;
+  }
+
+  String? _extractImageFromPayload(Map<String, dynamic> payload) {
+    if (payload.isEmpty) return null;
+
+    // Direct string fields
+    final directCandidates = [
+      'postImage',
+      'postImageUrl',
+      'postThumbnail',
+      'postThumbnailUrl',
+      'photoUrl',
+      'photo_url',
+      'imagePath',
+      'image_url',
+      'thumbnail',
+      'thumbnailUrl',
+    ];
+    for (final key in directCandidates) {
+      final value = payload[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+
+    // Nested post payloads that may include the thumbnail
+    final post = payload['post'] as Map<String, dynamic>?;
+    if (post != null) {
+      for (final key in [
+        'photo_url',
+        'photoUrl',
+        'image_url',
+        'imageUrl',
+        'thumbnail',
+        'thumbnailUrl',
+      ]) {
+        final value = post[key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+
+      // Nested photo object
+      final photo = post['photo'] as Map<String, dynamic>?;
+      if (photo != null) {
+        for (final key in ['image_url', 'imageUrl', 'url']) {
+          final value = photo[key];
+          if (value is String && value.trim().isNotEmpty) {
+            return value.trim();
+          }
+        }
+      }
+
+      // Photos list (take first)
+      final photos = post['photos'];
+      if (photos is List && photos.isNotEmpty) {
+        final first = photos.first;
+        if (first is String && first.trim().isNotEmpty) {
+          return first.trim();
+        }
+        if (first is Map<String, dynamic>) {
+          for (final key in ['image_url', 'imageUrl', 'url', 'photo_url']) {
+            final value = first[key];
+            if (value is String && value.trim().isNotEmpty) {
+              return value.trim();
+            }
+          }
+        }
+      }
+    }
+
     return null;
+  }
+
+  String? _extractPostId(Map<String, dynamic> payload) {
+    final direct = payload['postId'] ?? payload['post_id'];
+    final directString = _coerceString(direct);
+    if (directString != null && directString.isNotEmpty) {
+      return directString;
+    }
+    final post = payload['post'] as Map<String, dynamic>?;
+    if (post != null) {
+      final nested = post['postId'] ?? post['post_id'] ?? post['id'];
+      final nestedString = _coerceString(nested);
+      if (nestedString != null && nestedString.isNotEmpty) {
+        return nestedString;
+      }
+    }
+    return null;
+  }
+
+  String? _extractPhotoId(Map<String, dynamic> payload) {
+    final direct = payload['photoId'] ?? payload['photo_id'];
+    final directString = _coerceString(direct);
+    if (directString != null && directString.isNotEmpty) {
+      return directString;
+    }
+    final post = payload['post'] as Map<String, dynamic>?;
+    if (post != null) {
+      final nested = post['photo_id'] ?? post['photoId'];
+      final nestedString = _coerceString(nested);
+      if (nestedString != null && nestedString.isNotEmpty) {
+        return nestedString;
+      }
+    }
+    return null;
+  }
+
+  String? _coerceString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) {
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+    return value.toString();
   }
 
   String _resolveTitle(
