@@ -6,7 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../../../routes/app_pages.dart';
 import '../views/custom_camera_view.dart';
-import '../../../data/services/on_device_detection_service.dart';
+import '../../../data/services/yolo_api_service.dart';
 
 class CameraDetectionController extends GetxController {
   static CameraDetectionController get to => Get.find();
@@ -14,6 +14,7 @@ class CameraDetectionController extends GetxController {
   final _image = Rxn<File>();
   final _isLoading = false.obs;
   final ImagePicker _picker = ImagePicker();
+  final YoloApiService _yoloApiService = YoloApiService();
 
   File? get image => _image.value;
   bool get isLoading => _isLoading.value;
@@ -111,33 +112,30 @@ class CameraDetectionController extends GetxController {
     _isLoading.value = true;
 
     try {
-      print('⚡ Bắt đầu nhận diện on-device bằng TFLite...');
+      print('⚡ Gửi ảnh tới YOLO API...');
+      final result = await _yoloApiService.detect(_image.value!);
 
-      final result = await OnDeviceDetectionService.instance.detect(_image.value!);
-
-      if (result.detections.isEmpty) {
+      if (result.labels.isEmpty) {
         _showError('Không phát hiện được đối tượng nào');
         return;
       }
 
-      final detectedWords = <String>{
-        for (final d in result.detections) d.label,
-      };
+      final detectedWords = <String>{...result.labels};
 
-      print('✅ Nhận diện on-device được ${detectedWords.length} từ: $detectedWords');
+      print('✅ YOLO API nhận diện được ${detectedWords.length} từ: $detectedWords');
 
       // Navigate to result page
       Get.toNamed(
         Routes.detectionResult,
         arguments: {
           // Hiển thị ảnh gốc (hoặc ảnh annotate nếu bạn vẽ bounding boxes sau)
-          'detectedImageUrl': result.annotatedImagePath,
+          'detectedImageUrl': result.processedImageUrl ?? _image.value!.path,
           'words': detectedWords.toList(),
           'originalImage': _image.value,
         },
       );
     } catch (e) {
-      print('❌ Lỗi khi nhận diện on-device: $e');
+      print('❌ Lỗi khi gọi YOLO API: $e');
       _showError('Không thể nhận diện: $e');
     } finally {
       _isLoading.value = false;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../routes/app_pages.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/firestore_service.dart';
 
 class SurveyController extends GetxController {
   static SurveyController get to => Get.find();
@@ -128,16 +130,51 @@ class SurveyController extends GetxController {
   }
 
   // Complete survey and navigate to home
-  void completeSurvey() {
-    // Save survey data (in real app, send to backend)
-    debugPrint('Survey completed with data:');
-    debugPrint('Name: $name');
-    debugPrint('Birth: $birthDay/$birthMonth/$birthYear');
-    debugPrint('Gender: $gender');
-    debugPrint('Purpose: $purpose');
-    debugPrint('Study Time: $studyTime');
-
-    // Navigate to home
+  Future<void> completeSurvey() async {
+    await _persistSurveyData();
     Get.offAllNamed(Routes.home);
+  }
+
+  Future<void> _persistSurveyData() async {
+    final auth = Get.isRegistered<AuthService>() ? AuthService.to : null;
+    final firestore = Get.isRegistered<FirestoreService>() ? FirestoreService.to : null;
+    final userId = auth?.currentUserId ?? '';
+
+    if (userId.isEmpty) {
+      debugPrint('⚠️ Không có userId, bỏ qua lưu survey');
+      return;
+    }
+
+    // Cập nhật displayName trong FirebaseAuth
+    try {
+      await auth?.firebaseAuth.currentUser?.updateDisplayName(name.trim());
+    } catch (e) {
+      debugPrint('⚠️ Không cập nhật được displayName Firebase: $e');
+    }
+
+    // Lưu profile vào Firestore (profile screen dùng)
+    try {
+      await firestore?.upsertUserProfile(
+        userId: userId,
+        displayName: name.trim().isNotEmpty ? name.trim() : null,
+        birthday: _buildBirthday(),
+        gender: gender.isNotEmpty ? gender : null,
+        email: auth?.currentUserEmail,
+        avatarUrl: auth?.firebaseAuth.currentUser?.photoURL,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Không lưu profile lên Firestore: $e');
+    }
+  }
+
+  DateTime? _buildBirthday() {
+    if (_birthDay.isEmpty || _birthMonth.isEmpty || _birthYear.isEmpty) {
+      return null;
+    }
+    final day = int.tryParse(_birthDay.value);
+    final month = int.tryParse(_birthMonth.value);
+    final year = int.tryParse(_birthYear.value);
+    if (day == null || month == null || year == null) return null;
+    return DateTime(year, month, day);
   }
 }

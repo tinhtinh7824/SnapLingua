@@ -267,23 +267,7 @@ class ReviewController extends GetxController {
         [userId],
       );
 
-      // Seed the library for first-time users before continuing.
-      final shouldHydrate = userVocabulary.isEmpty &&
-          !skipHydration &&
-          Get.isRegistered<VocabularyService>();
-      if (shouldHydrate) {
-        try {
-          final hydrated = await VocabularyService.to.hydrateUserLibrary(
-            userId: userId,
-          );
-          if (hydrated) {
-            await loadCategories(skipHydration: true);
-            return;
-          }
-        } catch (e) {
-          Get.log('Hydrate vocabulary failed: $e');
-        }
-      }
+      // Không tự động seed thư viện mẫu; để trống cho đến khi người dùng thêm chủ đề/từ vựng.
     }
 
     final Iterable<Vocabulary> vocabularies;
@@ -307,6 +291,11 @@ class ReviewController extends GetxController {
       final categoryName = vocab.category.isNotEmpty ? vocab.category : 'Khác';
       grouped.putIfAbsent(categoryName, () => <Vocabulary>[]).add(vocab);
     }
+
+    // Chỉ hiển thị chủ đề có dữ liệu thuộc người dùng hiện tại (khi đã đăng nhập)
+    // để tránh lộ chủ đề/từ vựng của tài khoản khác trên cùng thiết bị.
+    final Set<String> allowedCategoryNames =
+        isUserLoggedIn ? grouped.keys.toSet() : categoryByName.keys.toSet();
     final List<Category> categoriesToDeactivate = [];
     final List<Category> categoriesToActivate = [];
     for (final entry in categoryByName.entries) {
@@ -356,43 +345,46 @@ class ReviewController extends GetxController {
     // Build categories from all Category records in Realm so that even
     // categories with zero words (recently created by the user) are
     // shown. Use the grouped map to supply words when available.
-    final List<VocabularyCategory> loadedCategories = categoryByName.entries
-        .map((entry) {
-      final categoryName = entry.key;
-      final vocabList = grouped[categoryName] ?? <Vocabulary>[];
-      final items = vocabList.map((vocab) {
-        final userVocab = userVocabMap[vocab.id];
-        final examplePair = ExampleSentenceService.resolveForVocabulary(
-          word: vocab.word,
-          translation: vocab.translation,
-          definition: vocab.definition,
-          category: vocab.category,
-          example: vocab.example,
-          tags: vocab.tags,
-        );
-        return VocabularyTopicItem(
-          word: vocab.word,
-          ipa: vocab.phonetic ?? '',
-          translation: vocab.translation ?? '',
-          exampleEn: examplePair.english,
-          exampleVi: examplePair.vietnamese,
-          status: _mapLearningStatus(userVocab),
-        );
-      }).toList();
+    final List<VocabularyCategory> loadedCategories = allowedCategoryNames
+        .map((categoryName) {
+          final categoryRealm = categoryByName[categoryName];
+          if (categoryRealm == null) return null;
 
-      final progress = _calculateProgress(vocabList, userVocabMap);
-      final categoryRealm = entry.value;
-      final icon = iconOverrides[categoryName] ??
-          _categoryIcons[categoryName] ??
-          '📘';
-      return VocabularyCategory(
-        id: categoryRealm.id,
-        name: categoryName,
-        icon: icon,
-        progress: progress,
-        words: items,
-      );
-    }).toList()
+          final vocabList = grouped[categoryName] ?? <Vocabulary>[];
+          final items = vocabList.map((vocab) {
+            final userVocab = userVocabMap[vocab.id];
+            final examplePair = ExampleSentenceService.resolveForVocabulary(
+              word: vocab.word,
+              translation: vocab.translation,
+              definition: vocab.definition,
+              category: vocab.category,
+              example: vocab.example,
+              tags: vocab.tags,
+            );
+            return VocabularyTopicItem(
+              word: vocab.word,
+              ipa: vocab.phonetic ?? '',
+              translation: vocab.translation ?? '',
+              exampleEn: examplePair.english,
+              exampleVi: examplePair.vietnamese,
+              status: _mapLearningStatus(userVocab),
+            );
+          }).toList();
+
+          final progress = _calculateProgress(vocabList, userVocabMap);
+          final icon = iconOverrides[categoryName] ??
+              _categoryIcons[categoryName] ??
+              '📘';
+          return VocabularyCategory(
+            id: categoryRealm.id,
+            name: categoryName,
+            icon: icon,
+            progress: progress,
+            words: items,
+          );
+        })
+        .whereNotNull()
+        .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
     categories.assignAll(loadedCategories);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:snaplingua/app/data/models/realm/vocabulary_model.dart';
@@ -528,7 +529,12 @@ class CommunityController extends GetxController {
   // Subscriptions used when the current user is a leader to listen to pending
   // membership requests for groups they manage.
   final Map<String, StreamSubscription<List<FirestoreGroupMember>>>
-    _leaderPendingSubscriptions = {};
+      _leaderPendingSubscriptions = {};
+
+  // Sound effects
+  final AudioPlayer _likePlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+  final AudioPlayer _commentPlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+  final AudioPlayer _savePlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
   _GroupCycleWindow? _activeGroupCycleWindow;
   String? _activeGroupXpId;
   static const List<String> _groupIconAssets = [
@@ -811,6 +817,9 @@ class CommunityController extends GetxController {
     } catch (_) {}
     _leaderPendingSubscriptions.clear();
     _disposeGroupXpSubscriptions();
+    _likePlayer.dispose();
+    _commentPlayer.dispose();
+    _savePlayer.dispose();
     super.onClose();
   }
 
@@ -3323,6 +3332,7 @@ class CommunityController extends GetxController {
           postId: post.id,
           userId: userId,
         );
+        await _playLikeSound();
         await _sendPostLikeNotification(
           post: post,
           actor: actor,
@@ -3613,6 +3623,7 @@ class CommunityController extends GetxController {
         post.commentMessages[insertedIndex] = updated;
         post.commentMessages.refresh();
       }
+      await _playCommentSound();
       if (Get.isRegistered<QuestService>()) {
         await QuestService.to.incrementQuestProgress(
           DailyQuestType.engageCommunity,
@@ -3777,6 +3788,42 @@ class CommunityController extends GetxController {
       Get.log('Không thể lấy ảnh cho thông báo bài viết ${post.id}: $e');
     }
     return image;
+  }
+
+  Future<void> _playLikeSound() async {
+    try {
+      await _likePlayer.stop();
+      await _likePlayer.play(
+        AssetSource('sounds/tym.mp3'),
+        volume: 1.0,
+      );
+    } catch (e) {
+      Get.log('Play like sound error: $e');
+    }
+  }
+
+  Future<void> _playCommentSound() async {
+    try {
+      await _commentPlayer.stop();
+      await _commentPlayer.play(
+        AssetSource('sounds/open.wav'),
+        volume: 1.0,
+      );
+    } catch (e) {
+      Get.log('Play comment sound error: $e');
+    }
+  }
+
+  Future<void> _playSaveSound() async {
+    try {
+      await _savePlayer.stop();
+      await _savePlayer.play(
+        AssetSource('sounds/share.wav'),
+        volume: 1.0,
+      );
+    } catch (e) {
+      Get.log('Play save sound error: $e');
+    }
   }
 
   void showComments(CommunityPost post) {
@@ -3973,6 +4020,7 @@ class CommunityController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 3),
       );
+      await _playSaveSound();
       // Notify learning/review/topic controllers so UI updates immediately
       try {
         if (Get.isRegistered<LearningTabController>()) {

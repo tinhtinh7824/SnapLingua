@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -38,6 +39,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
   bool isLoading = true;
   bool _isSavingLocally = false;
   bool _isSavingAndSharing = false;
+  late final AudioPlayer _savePlayer;
+  late final AudioPlayer _sharePlayer;
 
   final FlutterTts flutterTts = FlutterTts();
   static const String _guestUserId = 'guest';
@@ -45,6 +48,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
   @override
   void initState() {
     super.initState();
+    _savePlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+    _sharePlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
 
     // Get arguments
     final args = Get.arguments as Map<String, dynamic>;
@@ -97,6 +102,8 @@ class _DetectionResultViewState extends State<DetectionResultView> {
 
   @override
   void dispose() {
+    _savePlayer.dispose();
+    _sharePlayer.dispose();
     flutterTts.stop();
     super.dispose();
   }
@@ -414,6 +421,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
         return;
       }
 
+      await _playSaveSound();
       Get.snackbar(
         'Thành công',
         'Đã lưu ${selectedWords.length} từ vựng',
@@ -462,6 +470,24 @@ class _DetectionResultViewState extends State<DetectionResultView> {
           }
         });
       }
+    }
+  }
+
+  Future<void> _playSaveSound() async {
+    try {
+      await _savePlayer.stop();
+      await _savePlayer.play(AssetSource('sounds/save.wav'));
+    } catch (e) {
+      Get.log('Play save sound error: $e');
+    }
+  }
+
+  Future<void> _playShareSound() async {
+    try {
+      await _sharePlayer.stop();
+      await _sharePlayer.play(AssetSource('sounds/share.wav'));
+    } catch (e) {
+      Get.log('Play share sound error: $e');
     }
   }
 
@@ -582,6 +608,7 @@ class _DetectionResultViewState extends State<DetectionResultView> {
         }
       });
 
+      await _playShareSound();
       Get.snackbar(
         'Thành công',
         'Đã lưu ${vocabularyItems.length} từ vựng và chia sẻ lên cộng đồng!',

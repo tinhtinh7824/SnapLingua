@@ -31,6 +31,7 @@ class AuthService extends GetxService {
           ? FirestoreService.to
           : Get.put(FirestoreService());
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  FirebaseAuth get firebaseAuth => _firebaseAuth;
 
   final RxBool _isLoggedIn = false.obs;
   final RxString _currentUserId = ''.obs;

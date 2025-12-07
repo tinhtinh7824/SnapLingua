@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -18,6 +19,7 @@ class _CustomCameraViewState extends State<CustomCameraView> {
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   bool _isTakingPicture = false;
+  late final AudioPlayer _shutterPlayer;
   int _currentCameraIndex = 0;
   FlashMode _flashMode = FlashMode.off;
   double _currentZoomLevel = 1.0;
@@ -27,6 +29,7 @@ class _CustomCameraViewState extends State<CustomCameraView> {
   @override
   void initState() {
     super.initState();
+    _shutterPlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
     _initializeCamera();
   }
 
@@ -104,8 +107,17 @@ class _CustomCameraViewState extends State<CustomCameraView> {
 
   @override
   void dispose() {
+    _shutterPlayer.dispose();
     _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _playShutterSound() async {
+    try {
+      await _shutterPlayer.play(AssetSource('sounds/camera.wav'));
+    } catch (e) {
+      Get.log('Không phát được âm thanh chụp: $e');
+    }
   }
 
   Future<void> _takePicture() async {
@@ -118,6 +130,8 @@ class _CustomCameraViewState extends State<CustomCameraView> {
     });
 
     try {
+      // Phát âm thanh khi bấm nút chụp
+      _playShutterSound();
       final XFile picture = await _controller!.takePicture();
       Get.back(result: picture.path);
     } catch (e) {

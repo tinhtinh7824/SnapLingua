@@ -7,11 +7,19 @@ class PlatformDetector {
   static bool get isAndroidEmulator {
     if (!Platform.isAndroid) return false;
 
-    // Android emulator thường có các đặc điểm:
-    // - Model name chứa "sdk", "emulator", "android sdk"
-    // Nhưng trong Flutter, ta không thể trực tiếp lấy được device info mà không dùng plugin
-    // Nên ta sẽ dùng cách đơn giản: assume emulator nếu debug mode
-    return kDebugMode;
+    // Thử bắt một số chỉ dấu mà Flutter expose qua env (không tin cậy tuyệt đối
+    // nhưng tránh việc auto coi thiết bị thật là emulator chỉ vì đang debug).
+    const possibleKeys = ['ANDROID_PRODUCT', 'ANDROID_MODEL', 'ANDROID_HARDWARE'];
+    final indicators = <String>[
+      for (final key in possibleKeys)
+        (Platform.environment[key] ?? '').toLowerCase(),
+    ].where((e) => e.isNotEmpty).toList();
+
+    return indicators.any((v) =>
+        v.contains('sdk') ||
+        v.contains('emulator') ||
+        v.contains('gphone') ||
+        v.contains('generic'));
   }
 
   /// Kiểm tra xem có phải đang chạy trên iOS simulator không

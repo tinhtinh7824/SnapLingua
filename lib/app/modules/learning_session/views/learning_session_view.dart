@@ -1657,14 +1657,43 @@ class _FlashcardBack extends StatelessWidget {
 }
 
 // --- Completion Fullscreen ---
-class _LessonCompletedScreen extends StatelessWidget {
+class _LessonCompletedScreen extends StatefulWidget {
   const _LessonCompletedScreen({required this.summary});
   final RoundThreeSummary summary;
 
   @override
+  State<_LessonCompletedScreen> createState() => _LessonCompletedScreenState();
+}
+
+class _LessonCompletedScreenState extends State<_LessonCompletedScreen> {
+  late final AudioPlayer _player;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = AudioPlayer();
+    _playCompletionSound();
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playCompletionSound() async {
+    try {
+      await _player.stop();
+      await _player.play( AssetSource('sounds/complete.wav'), volume: 1.0);
+    } catch (e) {
+      Get.log('Play completion screen sound error: $e');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final percent = summary.firstTryAccuracyPercent;
-    final difficult = summary.difficultResults;
+    final percent = widget.summary.firstTryAccuracyPercent;
+    final difficult = widget.summary.difficultResults;
     return Scaffold(
       backgroundColor: const Color(0xFFE6F9FF),
       body: SafeArea(
@@ -1700,9 +1729,9 @@ class _LessonCompletedScreen extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          summary.xpEarned > 0 ? '+${summary.xpEarned}' : '0',
+                          widget.summary.xpEarned > 0 ? '+${widget.summary.xpEarned}' : '0',
                           style: AppTextStyles.h4.copyWith(
-                            color: summary.xpEarned > 0 ? const Color.fromARGB(255, 4, 57, 130) : AppColors.textHint,
+                            color: widget.summary.xpEarned > 0 ? const Color.fromARGB(255, 4, 57, 130) : AppColors.textHint,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1723,9 +1752,9 @@ class _LessonCompletedScreen extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          summary.scalesEarned > 0 ? '+${summary.scalesEarned}' : '0',
+                          widget.summary.scalesEarned > 0 ? '+${widget.summary.scalesEarned}' : '0',
                           style: AppTextStyles.h4.copyWith(
-                            color: summary.scalesEarned > 0 ? const Color(0xFF0A69C7) : AppColors.textHint,
+                            color: widget.summary.scalesEarned > 0 ? const Color(0xFF0A69C7) : AppColors.textHint,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

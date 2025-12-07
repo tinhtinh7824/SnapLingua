@@ -206,6 +206,28 @@ class FirestoreService extends GetxService {
     await _users.doc(userId).set(user.toMap(), SetOptions(merge: true));
   }
 
+  Future<void> upsertUserProfile({
+    required String userId,
+    String? displayName,
+    String? email,
+    String? avatarUrl,
+    DateTime? birthday,
+    String? gender,
+  }) async {
+    if (userId.isEmpty) return;
+    final data = <String, dynamic>{
+      if (displayName != null && displayName.trim().isNotEmpty)
+        'displayName': displayName.trim(),
+      if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+      if (avatarUrl != null && avatarUrl.trim().isNotEmpty) 'avatarUrl': avatarUrl.trim(),
+      if (birthday != null) 'birthday': Timestamp.fromDate(birthday),
+      if (gender != null && gender.trim().isNotEmpty) 'gender': gender.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (data.isEmpty) return;
+    await _users.doc(userId).set(data, SetOptions(merge: true));
+  }
+
   Stream<List<FirestoreGroupMessage>> listenToGroupMessages({
     required String groupId,
     int limit = 100,

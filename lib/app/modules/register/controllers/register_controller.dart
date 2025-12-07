@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../routes/app_pages.dart';
-import '../../../data/services/auth_api_service.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/models/register_request.dart';
 import '../../../core/theme/app_widgets.dart';
 
 class RegisterController extends GetxController {
   static RegisterController get to => Get.find();
 
-  final _authApiService = AuthApiService();
+  final AuthService _authService = AuthService.to;
 
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
@@ -139,25 +139,30 @@ class RegisterController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // Tạo request với dữ liệu từ form
-      final request = RegisterRequest(
-        email: emailController.text.trim(),
-        password: passwordController.text,
-        displayName: displayNameController.text.trim().isEmpty
-            ? null
-            : displayNameController.text.trim(),
-      );
+      final email = emailController.text.trim();
+      final password = passwordController.text;
+      final displayName =
+          displayNameController.text.trim().isEmpty
+              ? null
+              : displayNameController.text.trim();
 
-      // Gọi API đăng ký
-      final response = await _authApiService.register(request);
+      // Gọi Firebase auth qua AuthService
+      final response = await _authService.register(
+        email: email,
+        password: password,
+        name: displayName,
+      );
 
       _isLoading.value = false;
 
-      if (response.success) {
+      final success = response['success'] == true;
+      final message = response['message']?.toString() ?? 'Đăng ký thành công';
+
+      if (success) {
         // Đăng ký thành công
         AppWidgets.showSuccessDialog(
           title: 'Thành công',
-          message: response.message,
+          message: message,
           onConfirm: () {
             // Chuyển đến màn hình survey
             Get.offNamed(Routes.survey);
@@ -167,7 +172,7 @@ class RegisterController extends GetxController {
         // Đăng ký thất bại
         AppWidgets.showErrorDialog(
           title: 'Lỗi đăng ký',
-          message: response.message,
+          message: message,
         );
       }
     } catch (e) {
