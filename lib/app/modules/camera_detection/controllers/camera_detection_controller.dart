@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../../routes/app_pages.dart';
 import '../views/custom_camera_view.dart';
@@ -124,12 +125,21 @@ class CameraDetectionController extends GetxController {
 
       print('✅ YOLO API nhận diện được ${detectedWords.length} từ: $detectedWords');
 
+      // Nếu YOLO trả về ảnh annotate qua URL, tải về file tạm riêng để tránh bị backend ghi đè.
+      String resolvedImagePath = _image.value!.path;
+      if ((result.processedImageUrl ?? '').isNotEmpty) {
+        final downloaded = await _downloadProcessedImage(result.processedImageUrl!);
+        if (downloaded != null) {
+          resolvedImagePath = downloaded.path;
+        }
+      }
+
       // Navigate to result page
       Get.toNamed(
         Routes.detectionResult,
         arguments: {
           // Hiển thị ảnh gốc (hoặc ảnh annotate nếu bạn vẽ bounding boxes sau)
-          'detectedImageUrl': result.processedImageUrl ?? _image.value!.path,
+          'detectedImageUrl': resolvedImagePath,
           'words': detectedWords.toList(),
           'originalImage': _image.value,
         },
@@ -151,5 +161,22 @@ class CameraDetectionController extends GetxController {
       colorText: Colors.white,
       duration: const Duration(seconds: 3),
     );
+  }
+
+  Future<File?> _downloadProcessedImage(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+        return null;
+      }
+      final tempDir = await getTemporaryDirectory();
+      final filePath =
+          '${tempDir.path}/community_post_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+      return file;
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -579,8 +579,10 @@ class _DetectionResultViewState extends State<DetectionResultView> {
       await _awardXp(5, 'camera_share', vocabularyItems.length);
 
       final communityController = _ensureCommunityController();
+      final imagePayload = await _encodeImageForPost(detectedImageUrl);
+
       await communityController.addUserPost(
-        imageUrl: detectedImageUrl,
+        imageUrl: imagePayload,
         vocabularyItems: vocabularyItems,
         caption: 'Khám phá từ vựng mới',
       );
@@ -625,6 +627,32 @@ class _DetectionResultViewState extends State<DetectionResultView> {
         colorText: AppColors.textWhite,
       );
     }
+  }
+
+  /// Chuyển ảnh sang data URI để mỗi bài có ảnh riêng, tránh server YOLO ghi đè.
+  Future<String> _encodeImageForPost(String pathOrUrl) async {
+    try {
+      // Nếu là file local
+      final file = File(pathOrUrl);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        final b64 = base64Encode(bytes);
+        return 'data:image/jpeg;base64,$b64';
+      }
+
+      // Nếu là URL, thử tải về rồi encode
+      final uri = Uri.tryParse(pathOrUrl);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        final response = await http.get(uri);
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          final b64 = base64Encode(response.bodyBytes);
+          return 'data:image/jpeg;base64,$b64';
+        }
+      }
+    } catch (_) {
+      // fallback below
+    }
+    return pathOrUrl;
   }
 
   String _resolveUserId() {

@@ -971,22 +971,24 @@ class CommunityController extends GetxController {
   void _mapFirestorePosts(List<FirestorePost> postList) {
     Future<void>(() async {
       try {
-        final List<CommunityPost> mapped = [];
-        for (final post in postList) {
-          try {
-            final built = await _buildCommunityPost(post);
-            mapped.add(built);
-          } on FirebaseException catch (e) {
-            // Skip transient Firestore errors per post, keep trying others.
-            if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
-              postsError.value ??=
-                  'Kết nối Firestore đang gián đoạn. Kéo xuống để thử lại.';
-              Get.log('Không thể chuyển đổi bài viết cộng đồng: $e');
-              continue;
+        final List<CommunityPost> mapped = await Future.wait(
+          postList.map((post) async {
+            try {
+              return await _buildCommunityPost(post);
+            } on FirebaseException catch (e) {
+              // Bỏ qua lỗi tạm thời từng bài để không chặn luồng chung.
+              if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+                postsError.value ??=
+                    'Kết nối Firestore đang gián đoạn. Kéo xuống để thử lại.';
+                Get.log('Không thể chuyển đổi bài viết cộng đồng: $e');
+                return null;
+              }
+              rethrow;
             }
-            rethrow;
-          }
-        }
+          }),
+        ).then(
+          (list) => list.whereType<CommunityPost>().toList(),
+        );
 
         if (mapped.isNotEmpty) {
           _postCache = mapped;
@@ -1421,6 +1423,8 @@ class CommunityController extends GetxController {
         currentLeague.value = CommunityLeagueInfo.empty();
         return;
       }
+
+      rawParticipants = _deduplicateParticipants(rawParticipants);
 
       rawParticipants.sort((a, b) {
         final xpCompare = b.cappedXp.compareTo(a.cappedXp);
@@ -2347,6 +2351,34 @@ class CommunityController extends GetxController {
     await _loadGroupDetails(membership.groupId);
   }
 
+  List<_LeagueParticipantData> _deduplicateParticipants(
+    List<_LeagueParticipantData> source,
+  ) {
+    final Map<String, _LeagueParticipantData> unique = {};
+
+    bool _isBetter(_LeagueParticipantData a, _LeagueParticipantData b) {
+      final cappedCompare = a.cappedXp.compareTo(b.cappedXp);
+      if (cappedCompare != 0) return cappedCompare > 0;
+
+      final rawCompare = a.rawXp.compareTo(b.rawXp);
+      if (rawCompare != 0) return rawCompare > 0;
+
+      final rankA = a.member.rank ?? 999;
+      final rankB = b.member.rank ?? 999;
+      return rankA < rankB;
+    }
+
+    for (final data in source) {
+      final key = data.member.userId;
+      final existing = unique[key];
+      if (existing == null || _isBetter(data, existing)) {
+        unique[key] = data;
+      }
+    }
+
+    return unique.values.toList();
+  }
+
   List<_LeagueParticipantData> _selectParticipantsForLeaderboard(
     List<_LeagueParticipantData> raw,
     int desiredCount,
@@ -2475,36 +2507,61 @@ class CommunityController extends GetxController {
   }
 
   Future<CommunityPost> _buildCommunityPost(FirestorePost post) async {
-    final List<FirestorePostWord> words = await _withFirestoreRetry(
+    final String currentUserId = _resolveUserId();
+    final bool canFollowAuthor = currentUserId != _fallbackUserId &&
+        post.userId.isNotEmpty &&
+        post.userId != currentUserId;
+
+    // Tải song song để rút ngắn thời gian phản hồi.
+    final wordsFuture = _withFirestoreRetry(
       () => _firestoreService.getPostWords(post.postId),
     );
-    final List<FirestorePostLike> likes = await _withFirestoreRetry(
+    final likesFuture = _withFirestoreRetry(
       () => _firestoreService.getPostLikes(post.postId),
     );
-    final List<FirestorePostComment> comments = await _withFirestoreRetry(
+    final commentsFuture = _withFirestoreRetry(
       () => _firestoreService.getPostComments(
         post.postId,
         status: 'active',
         limit: 20,
       ),
     );
+    final authorFuture =
+        _withFirestoreRetry(() => _getPostAuthor(post.userId));
+    final photoFuture = _getPhotoById(post.photoId ?? '');
+    final followFuture = (!canFollowAuthor || _isPersistedFollowing(post.userId))
+        ? Future.value(true)
+        : _withFirestoreRetry(
+            () => _firestoreService.isFollowingUser(
+              userId: currentUserId,
+              targetUserId: post.userId,
+            ),
+          );
+
+    final results = await Future.wait([
+      wordsFuture,
+      likesFuture,
+      commentsFuture,
+      authorFuture,
+      photoFuture,
+      followFuture,
+    ]);
+
+    final List<FirestorePostWord> words = results[0] as List<FirestorePostWord>;
+    final List<FirestorePostLike> likes =
+        results[1] as List<FirestorePostLike>;
+    final List<FirestorePostComment> comments =
+        results[2] as List<FirestorePostComment>;
+    final FirestoreUser? author = results[3] as FirestoreUser?;
+    final FirestorePhoto? photo = results[4] as FirestorePhoto?;
+    final bool followResolved = results[5] as bool;
+
     final List<CommunityPostComment> mappedComments =
         await _mapCommentsWithUsers(comments);
 
-    final FirestoreUser? author =
-        await _withFirestoreRetry(() => _getPostAuthor(post.userId));
-    final String currentUserId = _resolveUserId();
     final bool hasLiked = currentUserId != _fallbackUserId &&
         likes.any((like) => like.userId == currentUserId);
-    final bool canFollowAuthor = currentUserId != _fallbackUserId &&
-        post.userId.isNotEmpty &&
-        post.userId != currentUserId;
-    final bool isFollowingAuthor =
-        canFollowAuthor && (_isPersistedFollowing(post.userId) ||
-            await _firestoreService.isFollowingUser(
-              userId: currentUserId,
-              targetUserId: post.userId,
-            ));
+    final bool isFollowingAuthor = canFollowAuthor && followResolved;
 
     final List<CommunityVocabularyItem> vocabularyItems = words.map((word) {
   final raw = word.meaningSnapshot.trim();
@@ -2531,11 +2588,8 @@ class CommunityController extends GetxController {
 
     String imageUrl = post.photoUrl;
     String? photoId = post.photoId;
-    if (photoId != null && photoId.isNotEmpty) {
-      final photo = await _getPhotoById(photoId);
-      if (photo != null && photo.imageUrl.isNotEmpty) {
-        imageUrl = photo.imageUrl;
-      }
+    if (photoId != null && photoId.isNotEmpty && photo != null) {
+      imageUrl = photo.imageUrl.isNotEmpty ? photo.imageUrl : imageUrl;
     }
 
     return CommunityPost(
