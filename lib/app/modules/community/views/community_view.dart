@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:snaplingua/app/core/theme/app_colors.dart';
 
 import '../controllers/community_controller.dart';
 import '../../community_detail/controllers/community_detail_controller.dart';
@@ -48,7 +49,7 @@ class CommunityView extends GetView<CommunityController> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFE6F9FF),
+        backgroundColor: AppColors.backgroundLight,
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 20.w),

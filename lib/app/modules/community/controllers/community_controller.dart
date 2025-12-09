@@ -1032,38 +1032,24 @@ class CommunityController extends GetxController {
         final mapped = await Future.wait(
           groupList.map(_buildCommunityGroup),
         );
-        final List<CommunityStudyGroup> resolvedGroups = [];
-        final List<CommunityStudyGroup> maybeEmpty = [];
+        final validatedGroups = await Future.wait(
+          mapped.map(_validateAndResolveGroupMembershipCount),
+        );
 
-        for (final group in mapped) {
-          if (group.memberCount > 0) {
+        final List<CommunityStudyGroup> resolvedGroups = [];
+        final List<CommunityStudyGroup> confirmedEmpty = [];
+
+        for (var i = 0; i < validatedGroups.length; i++) {
+          final group = validatedGroups[i];
+          if (group != null) {
             resolvedGroups.add(group);
           } else {
-            maybeEmpty.add(group);
+            confirmedEmpty.add(mapped[i]);
           }
         }
 
-        if (maybeEmpty.isNotEmpty) {
-          final validated = await Future.wait(
-            maybeEmpty.map(_validateAndResolveGroupMembershipCount),
-          );
-
-          for (final group in validated) {
-            if (group != null) {
-              resolvedGroups.add(group);
-            }
-          }
-
-          final confirmedEmpty = validated
-              .asMap()
-              .entries
-              .where((entry) => entry.value == null)
-              .map((entry) => maybeEmpty[entry.key])
-              .toList(growable: false);
-
-          if (confirmedEmpty.isNotEmpty) {
-            await _cleanupEmptyGroups(confirmedEmpty);
-          }
+        if (confirmedEmpty.isNotEmpty) {
+          await _cleanupEmptyGroups(confirmedEmpty);
         }
 
         studyGroups.assignAll(resolvedGroups);
@@ -1094,7 +1080,8 @@ class CommunityController extends GetxController {
       }
     } catch (e) {
       Get.log('Không thể kiểm tra thành viên nhóm ${group.groupId}: $e');
-      // fall through to treat as empty so it won't appear in UI
+      // Keep existing value when checking fails to avoid hiding the group.
+      return group;
     }
     return null;
   }
@@ -2730,24 +2717,23 @@ class CommunityController extends GetxController {
       return;
     }
 
-    // Prevent self-join for group leaders
-    if (group.leaderId == userId) {
-      Get.snackbar(
-        'Không thể tham gia',
-        'Bạn là trưởng nhóm của "${group.name}".',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
+    final bool isLeader = group.leaderId == userId;
 
     try {
       final existing = await _firestoreService.getGroupMembership(
         groupId: group.groupId,
         userId: userId,
       );
-      final status = group.requireApproval ? 'pending' : 'active';
+      final status = isLeader ? 'active' : (group.requireApproval ? 'pending' : 'active');
       if (existing != null) {
         if (existing.status == 'active') {
+          if (isLeader && existing.role != 'leader') {
+            await _firestoreService.updateGroupMemberStatus(
+              membershipId: existing.id,
+              status: 'active',
+              role: 'leader',
+            );
+          }
           Get.snackbar(
             'Đã tham gia',
             'Bạn đã là thành viên của "${group.name}".',
@@ -2755,7 +2741,7 @@ class CommunityController extends GetxController {
           );
           return;
         }
-        if (existing.status == 'pending') {
+        if (existing.status == 'pending' && !isLeader) {
           Get.snackbar(
             'Đang chờ phê duyệt',
             'Bạn đã gửi yêu cầu tham gia "${group.name}".',
@@ -2766,6 +2752,7 @@ class CommunityController extends GetxController {
         await _firestoreService.updateGroupMemberStatus(
           membershipId: existing.id,
           status: status,
+          role: isLeader ? 'leader' : existing.role,
           requestMessage:
               status == 'pending' ? 'Đang chờ trưởng nhóm phê duyệt.' : null,
         );
@@ -2773,7 +2760,7 @@ class CommunityController extends GetxController {
         await _firestoreService.createGroupMembership(
           groupId: group.groupId,
           userId: userId,
-          role: group.leaderId == userId ? 'leader' : 'member',
+          role: isLeader ? 'leader' : 'member',
           status: status,
           requestMessage:
               status == 'pending' ? 'Đang chờ trưởng nhóm phê duyệt.' : null,
@@ -2925,6 +2912,62 @@ class CommunityController extends GetxController {
     }
   }
 
+  bool isPostOwner(CommunityPost post) {
+    return _resolveUserId() == post.authorId;
+  }
+
+  bool isCurrentUser(String userId) {
+    return _resolveUserId() == userId;
+  }
+
+  Future<void> deleteCurrentGroup() async {
+    final details = joinedGroupDetails.value;
+    if (details == null) return;
+
+    final userId = _resolveUserId();
+    if (userId == _fallbackUserId) {
+      Get.snackbar(
+        'Cần đăng nhập',
+        'Hãy đăng nhập để xoá nhóm.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    if (details.group.leaderId != userId) {
+      Get.snackbar(
+        'Không thể xoá nhóm',
+        'Chỉ trưởng nhóm mới có quyền xoá nhóm.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    try {
+      await _firestoreService.deleteGroup(details.group.groupId);
+      studyGroups.removeWhere((g) => g.groupId == details.group.groupId);
+      incomingJoinRequests
+          .removeWhere((r) => r.groupId == details.group.groupId);
+      pendingJoinRequests
+          .removeWhere((r) => r.groupId == details.group.groupId);
+      _activeMembership = null;
+      _disposeGroupXpSubscriptions();
+      joinedGroupDetails.value = null;
+      _updateLeaderPendingSubscriptions();
+      Get.snackbar(
+        'Đã xoá nhóm',
+        'Nhóm "${details.group.name}" đã được xoá.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Có lỗi xảy ra',
+        'Không thể xoá nhóm: $e',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
   bool hasReportedPost(String postId) {
     return submittedReports.any((report) => report.postId == postId);
   }
@@ -2938,7 +2981,6 @@ class CommunityController extends GetxController {
         description != null && description.trim().isNotEmpty
             ? description.trim()
             : null;
-
     final userId = _resolveUserId();
     if (userId == _fallbackUserId) {
       Get.snackbar(
@@ -2980,10 +3022,6 @@ class CommunityController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
       );
     }
-  }
-
-  bool isPostOwner(CommunityPost post) {
-    return _resolveUserId() == post.authorId;
   }
 
   Future<void> deletePost(CommunityPost post) async {

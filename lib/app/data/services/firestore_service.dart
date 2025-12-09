@@ -2095,6 +2095,7 @@ class FirestoreService extends GetxService {
     String? memberId,
     required String status,
     String? requestMessage,
+    String? role,
   }) async {
     final docId = membershipId ?? memberId;
     if (docId == null) {
@@ -2102,6 +2103,9 @@ class FirestoreService extends GetxService {
     }
 
     final data = {'status': status};
+    if (role != null && role.trim().isNotEmpty) {
+      data['role'] = role.trim();
+    }
     if (requestMessage != null) {
       data['request_message'] = requestMessage;
     }
