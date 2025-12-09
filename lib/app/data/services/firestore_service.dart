@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
@@ -1664,6 +1665,44 @@ class FirestoreService extends GetxService {
     final snapshot =
         await _leagueMembers.where('cycle_id', isEqualTo: cycleId).get();
     return snapshot.docs.map(FirestoreLeagueMember.fromSnapshot).toList();
+  }
+
+  /// Fetch recent real (non-virtual) league members for the given tier across recent cycles.
+  /// Used to enrich leaderboards when the current cycle has too few members.
+  Future<List<FirestoreLeagueMember>> getRecentLeagueMembersByTier({
+    required String tierId,
+    int cycleLimit = 3,
+    int memberLimit = 120,
+  }) async {
+    if (tierId.isEmpty) return const [];
+    try {
+      final cyclesQuery = await _leagueCycles
+          .where('tier_id', isEqualTo: tierId)
+          .orderBy('created_at', descending: true)
+          .limit(cycleLimit)
+          .get();
+      if (cyclesQuery.docs.isEmpty) return const [];
+
+      final List<FirestoreLeagueMember> results = [];
+      final perCycleLimit =
+          math.max(10, (memberLimit / cyclesQuery.docs.length).ceil());
+
+      for (final doc in cyclesQuery.docs) {
+        final cycleId = doc.id;
+        final members = await _leagueMembers
+            .where('cycle_id', isEqualTo: cycleId)
+            .limit(perCycleLimit)
+            .get();
+        results.addAll(members.docs
+            .map(FirestoreLeagueMember.fromSnapshot)
+            .where((m) => m.isVirtual == false));
+        if (results.length >= memberLimit) break;
+      }
+      return results.take(memberLimit).toList();
+    } catch (e) {
+      Get.log('getRecentLeagueMembersByTier error: $e');
+      return const [];
+    }
   }
 
   Stream<List<FirestorePost>> listenToCommunityPosts({

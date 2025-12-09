@@ -358,9 +358,11 @@ class _RoundThreeContent extends StatefulWidget {
 class _RoundThreeContentState extends State<_RoundThreeContent> {
   late final PageController _pageController;
   late List<RoundThreeQuestion> _questions;
+  // Single SFX player; we stop before play to avoid overlap/timeouts.
   final AudioPlayer _sfxPlayer = AudioPlayer();
-  final AssetSource _correctSource =  AssetSource('sounds/correct.wav');
-  final AssetSource _wrongSource =  AssetSource('sounds/wrong.wav');
+  // Use asset-relative paths; the player will prepend "assets/" automatically.
+  final AssetSource _correctSource = AssetSource('sounds/correct.wav');
+  final AssetSource _wrongSource = AssetSource('sounds/wrong.wav');
   final RxBool _canContinue = false.obs;
   int _currentIndex = 0;
   bool _retryPhase = false;
@@ -375,9 +377,7 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
     super.initState();
     _pageController = PageController();
     _questions = _buildQuestionsFromWords(widget.controller.words);
-    _sfxPlayer
-      ..setPlayerMode(PlayerMode.lowLatency)
-      ..setReleaseMode(ReleaseMode.stop);
+    _configurePlayer(_sfxPlayer);
   }
 
   List<RoundThreeQuestion> _buildQuestionsFromWords(List<LearningWord> words) {
@@ -501,8 +501,8 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
   }
 
   Future<void> _playFeedbackSound(bool isCorrect) async {
+    final source = isCorrect ? _correctSource : _wrongSource;
     try {
-      final source = isCorrect ? _correctSource : _wrongSource;
       await _sfxPlayer.stop();
       await _sfxPlayer.play(
         source,
@@ -512,6 +512,26 @@ class _RoundThreeContentState extends State<_RoundThreeContent> {
     } catch (e) {
       Get.log('Play sound error: $e');
     }
+  }
+
+  void _configurePlayer(AudioPlayer player) {
+    player
+      ..setPlayerMode(PlayerMode.lowLatency)
+      ..setReleaseMode(ReleaseMode.stop)
+      ..setAudioContext(
+        const AudioContext(
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.ambient,
+          ),
+          android: AudioContextAndroid(
+            isSpeakerphoneOn: false,
+            stayAwake: false,
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.assistanceSonification,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+        ),
+      );
   }
 
   void _updatePrimaryAction(VoidCallback? action) {

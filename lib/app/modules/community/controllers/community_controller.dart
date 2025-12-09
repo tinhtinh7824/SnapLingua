@@ -1411,7 +1411,26 @@ class CommunityController extends GetxController {
         return;
       }
 
+      // Try to pull additional real users in the same tier when the pool is too small.
+      final int realCount =
+          rawParticipants.where((p) => !p.member.isVirtual).length;
+      if (realCount < desiredCount) {
+        final Set<String> seenUserIds =
+            rawParticipants.map((p) => p.member.userId).toSet();
+        final extras = await _fetchAdditionalTierMembers(
+          tier: tier,
+          cycle: cycle,
+          ruleSet: ruleSet,
+          excludeUserIds: seenUserIds,
+          targetCount: desiredCount - realCount,
+        );
+        rawParticipants.addAll(extras);
+      }
+
       rawParticipants = _deduplicateParticipants(rawParticipants);
+      // Recompute real count after enrichment to drive virtual generation.
+      final int dedupedRealCount =
+          rawParticipants.where((p) => !p.member.isVirtual).length;
 
       rawParticipants.sort((a, b) {
         final xpCompare = b.cappedXp.compareTo(a.cappedXp);
@@ -1540,8 +1559,8 @@ class CommunityController extends GetxController {
     FirestoreLeagueCycle cycle,
     _LeagueRuleSet ruleSet,
   ) async {
-    try {
-      final cacheKey = '${member.userId}:${cycle.cycleId}';
+      try {
+        final cacheKey = '${member.userId}:${cycle.cycleId}';
 
       // Fetch XP breakdown and user data in parallel
       final futures = await Future.wait([
@@ -1825,30 +1844,32 @@ class CommunityController extends GetxController {
       final name =
           _virtualNames[(i + tier.orderIndex * 5) % _virtualNames.length];
       final Map<String, int> xpBreakdown = {};
-      int totalXp = 0;
+
+      // Keep virtual accounts modest: random total XP between 0 and 200.
+      final int targetTotal = random.nextInt(201);
+      int remaining = targetTotal;
 
       if (ruleSet.xpCaps.isEmpty) {
-        final base = math.max(400, 900 - (i * 35) + random.nextInt(60));
-        final lessonXp = math.max(120, (base * 0.55).round());
-        final reviewXp = math.max(70, (base * 0.25).round());
-        final challengeXp = math.max(40, base - lessonXp - reviewXp);
+        // Simple split across common sources while respecting the 0–200 cap.
+        final lessonXp = (targetTotal * 0.5).round();
+        final reviewXp = (targetTotal * 0.3).round();
+        final challengeXp = math.max(0, targetTotal - lessonXp - reviewXp);
         xpBreakdown['lesson'] = lessonXp;
         xpBreakdown['review'] = reviewXp;
         xpBreakdown['challenge'] = challengeXp;
-        totalXp = lessonXp + reviewXp + challengeXp;
+        remaining = 0;
       } else {
-        for (final entry in ruleSet.xpCaps.entries) {
-          final variance = 0.55 + (random.nextDouble() * 0.35);
-          final cappedValue =
-              math.min(entry.value, (entry.value * variance).round());
-          final value = math.max(30, cappedValue);
+        // Distribute within caps but never exceed the targetTotal (<=200).
+        final entries = ruleSet.xpCaps.entries.toList()..shuffle(random);
+        for (final entry in entries) {
+          if (remaining <= 0) break;
+          final maxForSource = math.min(entry.value, remaining);
+          final value = maxForSource > 0 ? random.nextInt(maxForSource + 1) : 0;
           xpBreakdown[entry.key] = value;
-        }
-        totalXp = xpBreakdown.values.fold<int>(0, (sum, value) => sum + value);
-        if (totalXp == 0) {
-          totalXp = math.max(200, 600 - (i * 25));
+          remaining -= value;
         }
       }
+      final totalXp = targetTotal - remaining;
 
       final streak = math.max(2, math.min(7, 2 + random.nextInt(6)));
       final avatarIndex =
@@ -2366,6 +2387,39 @@ class CommunityController extends GetxController {
     return unique.values.toList();
   }
 
+  Future<List<_LeagueParticipantData>> _fetchAdditionalTierMembers({
+    required FirestoreLeagueTier tier,
+    required FirestoreLeagueCycle cycle,
+    required _LeagueRuleSet ruleSet,
+    required Set<String> excludeUserIds,
+    required int targetCount,
+  }) async {
+    if (targetCount <= 0) return const [];
+    try {
+      final extras = await _firestoreService.getRecentLeagueMembersByTier(
+        tierId: tier.tierId,
+        cycleLimit: 4,
+        memberLimit: math.max(30, targetCount * 3),
+      );
+      final filtered = extras
+          .where((m) => !m.isVirtual && !excludeUserIds.contains(m.userId))
+          .toList(growable: false);
+
+      final List<_LeagueParticipantData> mapped = [];
+      for (final member in filtered) {
+        final data = await _buildParticipantData(member, cycle, ruleSet);
+        if (data != null) {
+          mapped.add(data);
+        }
+        if (mapped.length >= targetCount) break;
+      }
+      return mapped;
+    } catch (e) {
+      Get.log('Không thể nạp thêm thành viên giải đấu: $e');
+      return const [];
+    }
+  }
+
   List<_LeagueParticipantData> _selectParticipantsForLeaderboard(
     List<_LeagueParticipantData> raw,
     int desiredCount,
@@ -2396,13 +2450,18 @@ class CommunityController extends GetxController {
     if (currentUser != null) {
       selected.add(currentUser);
     }
-    for (final participant in realUsers.followedBy(virtualUsers)) {
+    for (final participant in realUsers) {
+      if (selected.length >= desiredCount) break;
+      selected.add(participant);
+    }
+    for (final participant in virtualUsers) {
       if (selected.length >= desiredCount) break;
       selected.add(participant);
     }
     if (selected.isEmpty) {
       selected.addAll(pool.take(math.min(desiredCount, pool.length)));
     }
+    selected.shuffle(random);
     return selected;
   }
 
